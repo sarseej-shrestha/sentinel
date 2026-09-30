@@ -1,5 +1,6 @@
 from pathlib import Path
-from sentinel.config import PLANNER_MODEL, AS_OF
+
+from sentinel.config import AS_OF, PLANNER_MODEL
 
 
 def test_project_defaults():

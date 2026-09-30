@@ -1,9 +1,10 @@
 """Executable application boundary: questions, evidence, decisions, audit."""
+
 from sentinel.analytics.evidence import recommendation
+from sentinel.analytics.forecast import forecast_from_result
 from sentinel.analytics.risk import RiskEngine
 from sentinel.analytics.what_if import demand_scenario
-from sentinel.analytics.forecast import forecast_from_result
-from sentinel.audit.logger import AuditLog, ActionGate
+from sentinel.audit.logger import ActionGate, AuditLog
 from sentinel.nlq.service import ask
 
 
@@ -21,20 +22,31 @@ class Console:
         if record["status"] == "ok":
             output = record["model_output"]
             from sentinel.nlq.planner import validate_plan
+
             intent = validate_plan(output)["intent"]
             query = record["query_result"]
-            risk_kind = {"stockout": "stockout", "supplier_risk": "supplier_reliability", "shipments": "late_delivery"}.get(intent)
+            risk_kind = {
+                "stockout": "stockout",
+                "supplier_risk": "supplier_reliability",
+                "shipments": "late_delivery",
+            }.get(intent)
             if risk_kind:
                 if self.risks is None:
                     self.risks = RiskEngine().fit()
                 record["risks"] = [self.risks.assess(risk_kind, row) for row in query["rows"]]
-                record["recommendations"] = [recommendation(query, risk) for risk in record["risks"]]
+                record["recommendations"] = [
+                    recommendation(query, risk) for risk in record["risks"]
+                ]
             elif intent == "forecast":
                 try:
                     record["forecast"] = forecast_from_result(query)
-                    record["recommendations"] = [recommendation(query, forecast_output=record["forecast"])]
+                    record["recommendations"] = [
+                        recommendation(query, forecast_output=record["forecast"])
+                    ]
                 except ValueError as exc:
-                    record.update(status="missing_information", abstained=True, failure_behavior=str(exc))
+                    record.update(
+                        status="missing_information", abstained=True, failure_behavior=str(exc)
+                    )
             else:
                 record["recommendations"] = [recommendation(query)]
             if intent == "what_if":

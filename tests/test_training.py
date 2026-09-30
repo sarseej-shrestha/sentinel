@@ -6,7 +6,12 @@ import sys
 def test_sft_dataset_has_disjoint_splits_and_valid_json(tmp_path):
     from sentinel.nlq.planner import validate_plan
     from sentinel.nlq.sql_guard import guard_sql
-    subprocess.run([sys.executable, "scripts/build_sft_dataset.py", "--output", str(tmp_path)], check=True, capture_output=True)
+
+    subprocess.run(
+        [sys.executable, "scripts/build_sft_dataset.py", "--output", str(tmp_path)],
+        check=True,
+        capture_output=True,
+    )
     groups = {}
     for split, expected in (("train", 360), ("validation", 90), ("test", 90)):
         rows = [json.loads(line) for line in (tmp_path / f"{split}.jsonl").read_text().splitlines()]

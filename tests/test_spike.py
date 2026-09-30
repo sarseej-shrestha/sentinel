@@ -1,12 +1,24 @@
 import json
-from pathlib import Path
 import subprocess
 import sys
+
 import nbformat
 
 
 def test_spike_measures_real_calls_and_failures(tmp_path):
-    subprocess.run([sys.executable, "scripts/run_technical_spike.py", "--repeats", "1", "--output", str(tmp_path)], check=True, capture_output=True, text=True)
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_technical_spike.py",
+            "--repeats",
+            "1",
+            "--output",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     report = json.loads((tmp_path / "report.json").read_text())
     assert report["summary"]["calls"] == 12
     assert report["summary"]["expected_behavior_matches"] == 12

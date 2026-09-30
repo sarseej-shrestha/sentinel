@@ -4,7 +4,7 @@ Sentinel is a human-approved, read-only supply-chain operations console for CMPS
 
 ## Current Phase 2 status
 
-The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a validated planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and a reproducible technical spike. The current suite passes 63 tests.
+The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a validated planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and a reproducible technical spike. The current suite passes 66 tests.
 
 Eleven core Kaggle datasets were downloaded and profiled locally. The backorder competition returned `UnauthenticatedError`; nine benchmark competitions are registered but unattempted. No Kaggle records enter the executable demo or training examples.
 
@@ -141,6 +141,8 @@ Training uses PEFT LoRA over a 4-bit NF4 base model, fixed seeds, prompt-masked 
 ## Verification and intentionally uncommitted files
 
 `python -m pytest -q` covers profiles, all canonical tables, scenarios, planner JSON, destructive and unknown-column queries, SQL bypass attempts, timeouts, empty/missing data, risk schemas, forecast intervals, evidence integrity, review decisions, audit tampering/replay, training splits, the CLI and the complete spike. `python scripts/quality_gate.py` checks staged content, credentials, file sizes and author identity before a milestone commit.
+
+For code-style checks, install `python -m pip install -e '.[dev]'`, then run `ruff check src scripts tests` and `ruff format --check src scripts tests`. The notebook's code cells were also executed successfully during final QA.
 
 Raw downloads, local profiles, databases, training JSONL, model weights/adapters, measurements, audit replay exports, virtual environments and credentials are ignored. Only small synthetic fixtures are committed. Detailed working notes are in a private Obsidian vault outside Git. The only human-facing documentation files are this README and the required technical-spike summary.
 
