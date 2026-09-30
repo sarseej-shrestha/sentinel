@@ -53,6 +53,9 @@ class RulePlanner:
             return plan("shipments", "shipment_view", "SELECT * FROM shipment_view WHERE supplier_name = $supplier", {"supplier": "Supplier "+shipments[1].upper()}, ["source_record_id", "promised_date", "delivered_date"])
         if q == "show shipments missing promised delivery dates":
             return plan("shipments", "shipment_view", "SELECT * FROM shipment_view WHERE promised_date IS NULL", evidence_fields=["source_record_id", "promised_date"])
+        demand = re.fullmatch(r"forecast demand for product (p\d+) at warehouse (\d+)", q)
+        if demand:
+            return plan("forecast", "demand_view", "SELECT * FROM demand_view WHERE product_id = $product AND warehouse_id = $warehouse ORDER BY demand_date", {"product": demand[1].upper(), "warehouse": "W"+demand[2]}, ["source_record_id", "demand_date", "units"])
         return plan(needs_clarification=True, abstain=True)
 
 

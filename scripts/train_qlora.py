@@ -5,7 +5,7 @@ from pathlib import Path
 from sentinel.config import PLANNER_MODEL, SEED
 
 
-def encode_example(tokenizer, example, max_length=2048):
+def encode_example(tokenizer, example, max_length=4096):
     messages = example["messages"]
     prompt = tokenizer.apply_chat_template(messages[:-1], tokenize=True, add_generation_prompt=True)
     full = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False)
@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--data", type=Path, default=Path("data/training"))
     parser.add_argument("--output", type=Path, default=Path("models/sentinel-qlora"))
     parser.add_argument("--epochs", type=float, default=1)
+    parser.add_argument("--max-length", type=int, default=4096)
     args = parser.parse_args()
     try:
         import torch
@@ -37,7 +38,7 @@ def main():
         raise ValueError("Entity leakage between training and validation")
     tokenizer = AutoTokenizer.from_pretrained(PLANNER_MODEL)
     tokenizer.pad_token = tokenizer.eos_token
-    encoded = data.map(lambda row: encode_example(tokenizer, row), remove_columns=data["train"].column_names)
+    encoded = data.map(lambda row: encode_example(tokenizer, row, args.max_length), remove_columns=data["train"].column_names)
     dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     quantization = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=dtype)
     model = AutoModelForCausalLM.from_pretrained(PLANNER_MODEL, quantization_config=quantization, device_map={"": torch.cuda.current_device()})

@@ -2,6 +2,7 @@
 from sentinel.analytics.evidence import recommendation
 from sentinel.analytics.risk import RiskEngine
 from sentinel.analytics.what_if import demand_scenario
+from sentinel.analytics.forecast import forecast_from_result
 from sentinel.audit.logger import AuditLog, ActionGate
 from sentinel.nlq.service import ask
 
@@ -28,6 +29,12 @@ class Console:
                     self.risks = RiskEngine().fit()
                 record["risks"] = [self.risks.assess(risk_kind, row) for row in query["rows"]]
                 record["recommendations"] = [recommendation(query, risk) for risk in record["risks"]]
+            elif intent == "forecast":
+                try:
+                    record["forecast"] = forecast_from_result(query)
+                    record["recommendations"] = [recommendation(query, forecast_output=record["forecast"])]
+                except ValueError as exc:
+                    record.update(status="missing_information", abstained=True, failure_behavior=str(exc))
             else:
                 record["recommendations"] = [recommendation(query)]
             if intent == "what_if":

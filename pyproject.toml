@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "sentinel-console"
 version = "0.2.0"
 description = "Synthetic, human-approved supply-chain analysis"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dynamic = ["dependencies"]
 
 [tool.setuptools.dynamic]

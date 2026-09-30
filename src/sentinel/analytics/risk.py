@@ -71,6 +71,8 @@ class RiskEngine:
             missing.append("fresh inventory (at most 3 days old)")
         if kind == "supplier_reliability" and (row.get("evaluable_shipments") or 0) < 10:
             missing.append("at least 10 evaluable shipments")
+        if kind == "supplier_reliability" and row.get("missing_or_invalid_shipments", 0) > 0:
+            missing.append("Resolve excluded shipment records before assessing supplier reliability.")
         if missing:
             level, source = "unknown", "data_quality_rule_v1"
         else:

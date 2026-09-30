@@ -55,3 +55,17 @@ def test_retrieval_and_required_plans(database):
         plan = RulePlanner().generate(question, retrieved)
         assert not plan["abstain"]
         assert execute(database, plan["sql"], plan["parameters"]).status == "ok"
+
+
+@pytest.mark.parametrize("sql", ["SELECT s.unknown FROM supplier_view s", "SELECT * FROM supplier_view WHERE EXISTS (SELECT * FROM orders)", "SELECT * FROM supplier_view UNION SELECT * FROM orders", "SELECT current_setting('access_mode') FROM supplier_view", "SELECT * FROM glob('/tmp/*')", "PRAGMA database_list", "ATTACH 'other.duckdb' AS other", "SELECT * FROM supplier_view LIMIT $limit", "SELECT * FROM supplier_view OFFSET 1", "SELECT * FROM supplier_view JOIN risk_view ON supplier_view.supplier_id = risk_view.product_id"])
+def test_additional_sql_bypasses_are_blocked(sql):
+    with pytest.raises(SQLBlocked):
+        guard_sql(sql)
+
+
+def test_documented_join_and_parameter_injection(database):
+    joined = execute(database, "SELECT r.product_id, s.supplier_name FROM risk_view r JOIN supplier_view s ON r.supplier_id=s.supplier_id")
+    assert joined.status == "ok" and len(joined.rows) == 18
+    injection = execute(database, "SELECT * FROM supplier_view WHERE supplier_name = $name", {"name": "x'; DROP TABLE orders; --"})
+    assert injection.status == "empty"
+    assert execute(database, "SELECT * FROM supplier_view").status == "ok"
