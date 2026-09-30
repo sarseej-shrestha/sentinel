@@ -4,7 +4,7 @@ from sentinel.data.normalize import PROVENANCE
 
 SCHEMA = {
     "shipment_view": TABLES["shipments"] | PROVENANCE | {"supplier_name": "VARCHAR", "is_late": "BOOLEAN", "delay_days": "BIGINT"},
-    "supplier_view": TABLES["suppliers"] | PROVENANCE | {"shipment_count": "BIGINT", "evaluable_shipments": "BIGINT", "missing_or_invalid_shipments": "BIGINT", "late_delivery_rate": "DOUBLE", "mean_delay_days": "DOUBLE"},
+    "supplier_view": TABLES["suppliers"] | PROVENANCE | {"shipment_count": "BIGINT", "evaluable_shipments": "BIGINT", "missing_or_invalid_shipments": "BIGINT", "late_delivery_rate": "DOUBLE", "mean_delay_days": "DOUBLE", "recent_delay_events": "BIGINT"},
     "demand_view": TABLES["demand_daily"] | PROVENANCE | {"product_name": "VARCHAR", "warehouse_name": "VARCHAR", "day_of_week": "INTEGER", "is_weekend": "BOOLEAN"},
     "risk_view": {"product_id": "VARCHAR", "product_name": "VARCHAR", "warehouse_id": "VARCHAR", "warehouse_name": "VARCHAR", "supplier_id": "VARCHAR", "inventory_date": "DATE", "on_hand": "INTEGER", "reorder_point": "INTEGER", "avg_daily_demand": "DOUBLE", "history_days": "BIGINT", "days_of_cover": "DOUBLE", "inventory_age_days": "BIGINT"} | PROVENANCE,
 }

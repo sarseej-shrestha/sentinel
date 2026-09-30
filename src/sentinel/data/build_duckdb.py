@@ -40,9 +40,13 @@ VIEWS = {
  count(sh.shipment_id)-count(sh.is_late) AS missing_or_invalid_shipments,
  avg(CASE WHEN sh.is_late THEN 1.0 WHEN sh.is_late = false THEN 0.0 END) AS late_delivery_rate,
  avg(sh.delay_days) AS mean_delay_days,
+ coalesce(e.recent_delay_events, 0) AS recent_delay_events,
  s.source_dataset, s.source_record_id, s.synthetic_entity_id, s.data_quality_flag,
  s.missing_field_count, s.record_timestamp
  FROM suppliers s LEFT JOIN shipment_view sh USING(supplier_id)
+ LEFT JOIN (SELECT supplier_id, count(*) AS recent_delay_events FROM supplier_events
+ WHERE event_type = 'delay' AND event_date >= DATE '{as_of}' - INTERVAL 7 DAY
+ AND event_date <= DATE '{as_of}' GROUP BY supplier_id) e USING(supplier_id)
  GROUP BY ALL
 """,
 "demand_view": """

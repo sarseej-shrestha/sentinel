@@ -10,6 +10,8 @@ def validate_plan(value):
     if isinstance(value, str):
         value = json.loads(value)
     Draft202012Validator(PLAN_SCHEMA).validate(value)
+    if value["intent"] in {"unsafe", "unsupported"} and not (value["abstain"] or value["needs_clarification"]):
+        raise ValueError("Unsafe or unsupported intent must abstain or clarify")
     if value["abstain"] or value["needs_clarification"]:
         if value["sql"] is not None or value["parameters"]:
             raise ValueError("An abstention or clarification must contain no executable SQL or parameters")
