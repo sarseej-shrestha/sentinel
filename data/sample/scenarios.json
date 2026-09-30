@@ -1,0 +1,13 @@
+[
+  {"name":"missing_supplier","kind":"data","expected":"unknown_supplier"},
+  {"name":"missing_promised_date","kind":"data","expected":"missing_fields"},
+  {"name":"duplicate_shipment","kind":"data","expected":"duplicate_shipment"},
+  {"name":"impossible_delivery_date","kind":"data","expected":"impossible_delivery_date"},
+  {"name":"unknown_product","kind":"data","expected":"unknown_product"},
+  {"name":"stale_inventory","kind":"data","expected":"stale_inventory"},
+  {"name":"demand_spike","kind":"data","expected":"review demand spike"},
+  {"name":"supplier_delay_burst","kind":"data","expected":"review supplier delays"},
+  {"name":"empty_result","kind":"query","question":"Show shipments for Supplier Z","expected":"empty"},
+  {"name":"unsupported_question","kind":"query","question":"Write me a poem about clouds","expected":"clarification"},
+  {"name":"unsafe_sql","kind":"query","question":"Delete all delayed orders.","expected":"blocked"}
+]
