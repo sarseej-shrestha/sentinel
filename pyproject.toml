@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinel-console"
+version = "0.2.0"
+description = "Synthetic, human-approved supply-chain analysis"
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[project.optional-dependencies]
+models = ["torch>=2.6", "transformers>=4.46,<5", "sentence-transformers>=3,<6", "accelerate>=1", "peft>=0.14", "datasets>=3", "bitsandbytes>=0.45; sys_platform == 'linux'"]

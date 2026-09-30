@@ -1,0 +1,10 @@
+duckdb>=1.2,<2
+sqlglot>=26,<31
+jsonschema>=4.23,<5
+numpy>=2,<3
+pandas>=2.2,<4
+scikit-learn>=1.6,<2
+kagglehub>=0.3,<1
+requests>=2.32,<3
+pytest>=8,<10
+nbformat>=5.10,<6
