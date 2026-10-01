@@ -4,13 +4,13 @@ Sentinel is a human-approved, read-only supply-chain operations console for CMPS
 
 ## Current Phase 2 status
 
-The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a validated planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and a reproducible technical spike. The current suite passes 66 tests.
+The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a validated planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and a reproducible technical spike. The current suite passes 121 tests.
 
 Eleven core Kaggle datasets were downloaded and profiled locally. The backorder competition returned `UnauthenticatedError`; nine benchmark competitions are registered but unattempted. No Kaggle records enter the executable demo or training examples.
 
 The measured spike used deterministic planning and lexical retrieval: 36/36 expected behaviors, 6/6 unsafe cases blocked, 24/24 correct abstentions. SQL execution completed in 18/21 cases; the other three were intentional timeouts. These are smoke-test counts, not general accuracy claims. [Technical-spike findings](docs/technical_spike.md) include measured latency and limitations.
 
-Qwen and BGE interfaces are implemented but model inference was not measured here. QLoRA was not run because this macOS arm64 host lacks CUDA and the optional torch dependency. Training examples were generated and validated (360 training, 90 validation, 90 test). No fine-tuning result is claimed.
+Qwen and BGE were provisioned and genuinely executed on this macOS arm64 host's Apple M4 Max GPU. The unchanged base planner failed the strict JSON contract on all 21 measured generations because it emitted Markdown-fenced JSON. All became audited abstentions; none of its SQL executed and no deterministic fallback was substituted. Static inspection also found incorrect metrics, entity filters and missing analysis inputs. The base-model path is not ready for successful end-to-end use. QLoRA was not run because the existing recipe requires CUDA. Training examples were previously generated and validated (360 training, 90 validation, 90 test); no fine-tuning result is claimed.
 
 ## Scope
 
@@ -126,6 +126,18 @@ python -m sentinel ask 'Why is Supplier A considered high risk?' --backend qwen 
 python scripts/run_technical_spike.py --backend qwen --retrieval bge --output artifacts/model_spike
 ```
 
+The declared `models` extra installed successfully with Python 3.14.3 on macOS 15.6. The tested versions were `torch==2.14.1`, `transformers==4.57.6`, `sentence-transformers==5.7.0`, `accelerate==1.15.0`, `peft==0.21.1`, `datasets==5.0.1`, `tokenizers==0.22.2`, `huggingface-hub==0.36.2`, and `safetensors==0.8.0`. The extra uses version ranges, so a later installation may resolve differently. The Linux-only bitsandbytes dependency was not installed on macOS.
+
+For Apple Silicon inference, check Metal access from the terminal used to run the model:
+
+```sh
+python -c 'import torch; print("MPS:", torch.backends.mps.is_available(), "CUDA:", torch.cuda.is_available())'
+```
+
+A restricted process may report MPS unavailable even when the host supports it. The measured run used a normal GPU-enabled process: both models loaded on `mps:0`, with Qwen in bfloat16. Weights stayed in the default Hugging Face cache, outside this repository (approximately 2.9 GiB for Qwen and 128 MiB for BGE). No API key was required. Qwen revision: `2e1fd397ee46e1388853d2af2c993145b0f1098a`; BGE revision: `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a`.
+
+The base-model measurement used the five supported example requests (including forecasting), plus unsupported and destructive requests, repeated three times. End-to-end latency including retrieval, generation, validation and audit was min 1,468.04 ms, mean 2,459.57 ms, median 2,500.53 ms, p95 3,263.43 ms, max 5,215.74 ms; these are abstention latencies, not successful-answer timings. Structured validity was 0/21 and supported SQL acceptance was 0/15. BGE retrieved the expected view first in 12/15 supported calls and within its top three in 15/15; repetitions are not independent accuracy samples. All three destructive requests were stopped at JSON validation. Separate static inspection confirmed the generated DELETE was also rejected by the SQL guard, without executing it. An explicitly injected unavailable-model case also produced an audited abstention. The local measurement artifacts are intentionally not committed.
+
 Runtime defaults to local-only model loading. Missing dependencies or weights produce an unavailable result; a requested Qwen run is never relabeled as successful model inference through a rules fallback. The explicit failure-injection cases still use their test doubles.
 
 QLoRA requires a compatible NVIDIA CUDA environment for this recipe:
@@ -148,10 +160,10 @@ Raw downloads, local profiles, databases, training JSONL, model weights/adapters
 
 ## Known limitations
 
-- The measured planner/retriever are offline baselines; Qwen/BGE inference and CUDA fine-tuning remain unmeasured.
+- Qwen/BGE inference is measured, but the unchanged base planner returned no accepted answers in this sample. Markdown fences violate the raw JSON contract, and removing them alone would not resolve the observed semantic errors. CUDA fine-tuning remains unmeasured.
 - Risk calibration and forecast evaluation use synthetic distributions and do not establish real operational validity. Forecast quantile bounds under-covered in the measured spike; no confidence percentage is shown.
 - SQL deliberately excludes CTEs, nested queries, arbitrary functions, cross joins and noncatalog joins. Model output may be rejected even when syntactically valid SQL.
 - Fixed dates, small entity counts, no authenticated reviewer identity, no concurrent-user workflow, and no external audit anchor. Local database owners can rewrite the database; the hash chain detects accidental edits, not a fully privileged adversary.
 - Repeated spike inputs are smoke tests. Timings include process startup and depend on hardware, interpreter and imports. Sparse history, invalid dates, stale stock and missing fields require review.
 
-Next validation: run Qwen/BGE and the QLoRA recipe on a suitable host, evaluate unseen paraphrases and schemas, and improve forecast interval coverage. Presentation and visual-design work remain a separate phase.
+Next model work, separately scoped: address the observed structured-output and semantic-planning failures, then repeat base-model evaluation on unseen paraphrases before attempting fine-tuning. Forecast interval coverage also remains a limitation. Presentation and visual-design work remain a separate phase.
