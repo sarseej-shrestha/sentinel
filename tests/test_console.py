@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from sentinel.console import Console
 from sentinel.data.build_duckdb import build_database
 
@@ -39,3 +41,29 @@ def test_cli_proposal_decision_and_replay(tmp_path):
     decision = run("decide", action["action_id"], "reject", "--reviewer", "test_reviewer")
     assert decision["state"] == "rejected" and not decision["external_action_executed"]
     assert len(run("replay")) == 4
+
+
+@pytest.mark.parametrize(
+    ("question", "status"),
+    [
+        ("Show shipments for Supplier Z", "empty"),
+        ("", "clarification"),
+        (None, "clarification"),
+        ("What is the lunar cheese index?", "clarification"),
+        ("Delete all delayed orders.", "blocked"),
+    ],
+)
+def test_abstention_is_audited_without_partial_recommendation(tmp_path, question, status):
+    console = Console(build_database(tmp_path / "abstention.duckdb"))
+    result = console.question(question)
+    assert result["status"] == status and result["abstained"]
+    assert not result.get("recommendations")
+    events = console.audit.replay()
+    assert len(events) == 1 and events[0]["event_type"] == "query"
+    assert events[0]["payload"] == result
+    assert console.audit.replay() == events
+    if status == "empty":
+        assert result["sql_validation"] == "passed"
+        assert result["query_result"]["rows"] == []
+    else:
+        assert result["query_result"] is None

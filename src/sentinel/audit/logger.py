@@ -1,4 +1,4 @@
-"""Hash-linked append-only application events; replay never re-executes actions."""
+"""Local tamper detection, not authentication; replay never re-executes actions."""
 
 import hashlib
 import json
@@ -10,11 +10,41 @@ import duckdb
 
 from sentinel.analytics.evidence import verify_snapshot
 
+GENESIS_HASH = "0" * 64
+EVENT_FIELDS = {"event_id", "event_type", "actor", "timestamp", "payload", "previous_hash"}
+
+
+def canonical_json(event):
+    return json.dumps(event, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
 
 def digest(event):
-    return hashlib.sha256(
-        json.dumps(event, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return hashlib.sha256(canonical_json(event).encode("utf-8")).hexdigest()
+
+
+def verify_events(events):
+    """Verify an ordered replay snapshot without executing it.
+
+    A rewritten chain or removed suffix needs an independently retained head hash
+    to detect. This verifier alone does not authenticate the author or completeness.
+    """
+    previous, seen = GENESIS_HASH, set()
+    try:
+        for stored in events:
+            event = dict(stored)
+            event_hash = event.pop("event_hash")
+            if (
+                set(event) != EVENT_FIELDS
+                or event["event_id"] in seen
+                or event["previous_hash"] != previous
+                or digest(event) != event_hash
+            ):
+                raise ValueError("Invalid event or hash link")
+            seen.add(event["event_id"])
+            previous = event_hash
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Audit chain verification failed") from exc
+    return {"event_count": len(seen), "head_hash": previous}
 
 
 class AuditLog:
@@ -24,26 +54,43 @@ class AuditLog:
     def replay(self):
         with duckdb.connect(self.database, read_only=True) as con:
             rows = con.execute(
-                "SELECT payload, previous_hash, event_hash FROM audit_events ORDER BY rowid"
+                "SELECT event_id, event_type, actor, payload, previous_hash, event_hash "
+                "FROM audit_events ORDER BY rowid"
             ).fetchall()
-        events, previous = [], "0" * 64
-        for payload, previous_hash, event_hash in rows:
-            event = json.loads(payload)
-            if (
-                previous_hash != previous
-                or event["previous_hash"] != previous
-                or digest(event) != event_hash
-            ):
-                raise ValueError("Audit chain verification failed")
-            events.append(event | {"event_hash": event_hash})
-            previous = event_hash
+        events = []
+        try:
+            for event_id, event_type, actor, payload, previous_hash, event_hash in rows:
+                event = json.loads(payload)
+                # The indexed columns must describe the same event as the hashed JSON.
+                if (
+                    not isinstance(event, dict)
+                    or set(event) != EVENT_FIELDS
+                    or any(
+                        event.get(key) != value
+                        for key, value in {
+                            "event_id": event_id,
+                            "event_type": event_type,
+                            "actor": actor,
+                            "previous_hash": previous_hash,
+                        }.items()
+                    )
+                ):
+                    raise ValueError("Event metadata differs from its snapshot")
+                events.append(event | {"event_hash": event_hash})
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Audit chain verification failed") from exc
+        verify_events(events)
         return events
+
+    def verify(self):
+        """Return the verified local chain length and head hash, or raise ValueError."""
+        return verify_events(self.replay())
 
     def append(self, event_type, payload, actor="system"):
         if not actor or not actor.strip():
             raise ValueError("An actor is required")
         events = self.replay()
-        previous = events[-1]["event_hash"] if events else "0" * 64
+        previous = events[-1]["event_hash"] if events else GENESIS_HASH
         now = datetime.now(timezone.utc).isoformat()
         event_id = str(uuid.uuid4())
         event = {
@@ -62,7 +109,7 @@ class AuditLog:
                     event_id,
                     event_type,
                     actor,
-                    json.dumps(event, sort_keys=True),
+                    canonical_json(event),
                     previous,
                     event_hash,
                     "sentinel_synthetic_runtime",
@@ -124,8 +171,12 @@ class ActionGate:
         if action["state"] != "pending":
             raise ValueError("Only a pending action can receive a decision")
         if decision == "edit":
-            if not edited_text or len(edited_text) > 2000:
-                raise ValueError("An edit must contain 1 to 2,000 characters")
+            if (
+                not isinstance(edited_text, str)
+                or not edited_text.strip()
+                or len(edited_text) > 2000
+            ):
+                raise ValueError("An edit must contain 1 to 2,000 characters of nonblank text")
             action["human_edit"] = edited_text
             action["revision"] += 1
             # An edit preserves the original evidence and needs a new explicit approval.
