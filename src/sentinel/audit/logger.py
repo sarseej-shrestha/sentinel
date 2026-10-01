@@ -8,6 +8,8 @@ from pathlib import Path
 
 import duckdb
 
+from sentinel.analytics.evidence import verify_snapshot
+
 
 def digest(event):
     return hashlib.sha256(
@@ -81,8 +83,17 @@ class ActionGate:
         self.audit = audit
 
     def propose(self, recommendation):
-        if not recommendation.get("simulated_action_only") or not recommendation.get("evidence_id"):
+        if (
+            not isinstance(recommendation, dict)
+            or recommendation.get("simulated_action_only") is not True
+        ):
             raise ValueError("A simulated, evidence-backed recommendation is required")
+        verify_snapshot(
+            recommendation.get("verified_sql"),
+            recommendation.get("parameters"),
+            recommendation.get("evidence_rows"),
+            recommendation.get("evidence_id"),
+        )
         action = {
             "action_id": str(uuid.uuid4()),
             "state": "pending",

@@ -6,19 +6,36 @@ import json
 from sentinel.nlq.executor import QueryResult
 
 
-def verified(result):
-    if isinstance(result, dict):
-        result = QueryResult(**result)
-    if result.status != "ok" or not result.rows or not result.evidence_id:
+def verify_snapshot(sql, parameters, rows, evidence_id):
+    """Check snapshot integrity at both recommendation and proposal boundaries."""
+    if (
+        not isinstance(sql, str)
+        or not sql.strip()
+        or not isinstance(parameters, dict)
+        or not isinstance(rows, list)
+        or not rows
+        or not all(isinstance(row, dict) and row for row in rows)
+        or not isinstance(evidence_id, str)
+        or not evidence_id
+    ):
         raise ValueError("Nonempty verified query evidence is required")
     digest = hashlib.sha256(
         json.dumps(
-            {"sql": result.sql, "parameters": result.parameters, "rows": result.rows},
+            {"sql": sql, "parameters": parameters, "rows": rows},
             sort_keys=True,
+            allow_nan=False,
         ).encode()
     ).hexdigest()
-    if digest != result.evidence_id:
-        raise ValueError("Evidence snapshot has changed since query execution")
+    if digest != evidence_id:
+        raise ValueError("Query evidence snapshot has changed since query execution")
+
+
+def verified(result):
+    if isinstance(result, dict):
+        result = QueryResult(**result)
+    if result.status != "ok":
+        raise ValueError("Nonempty verified query evidence is required")
+    verify_snapshot(result.sql, result.parameters, result.rows, result.evidence_id)
     return result
 
 
