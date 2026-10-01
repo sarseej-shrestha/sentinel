@@ -46,7 +46,7 @@ def test_cli_proposal_decision_and_replay(tmp_path):
 @pytest.mark.parametrize(
     ("question", "status"),
     [
-        ("Show shipments for Supplier Z", "empty"),
+        ("Show products likely to stock out within the next 1 days.", "empty"),
         ("", "clarification"),
         (None, "clarification"),
         ("What is the lunar cheese index?", "clarification"),

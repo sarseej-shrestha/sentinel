@@ -38,7 +38,7 @@ class Console:
     def _analyze(self, record):
         from sentinel.nlq.planner import validate_plan
 
-        output = validate_plan(record["model_output"])
+        output = validate_plan(record["compiled_plan"])
         intent = output["intent"]
         query = record["query_result"]
         risk_kind = {

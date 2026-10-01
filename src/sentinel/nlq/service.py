@@ -4,12 +4,13 @@ import time
 from dataclasses import asdict
 
 from sentinel.nlq.executor import execute
-from sentinel.nlq.planner import RulePlanner, validate_plan
+from sentinel.nlq.planner import RulePlanner
+from sentinel.nlq.query_plan import compile_query_plan, request_plan, validate_query_plan
 from sentinel.nlq.retrieval import SchemaRetriever
 from sentinel.nlq.sql_guard import SQLBlocked, guard_sql
 
 
-def ask(database, question, planner=None, retriever=None, query_timeout=3.0):
+def ask(database, question, planner=None, retriever=None, query_timeout=3.0, allow_fallback=None):
     start = time.perf_counter()
     record = {
         "input": question,
@@ -23,7 +24,26 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0):
         "clarified": False,
         "abstained": False,
         "failure_behavior": None,
+        "candidate_query_plan": None,
+        "query_plan": None,
+        "compiled_plan": None,
+        "plan_validation": "not_run",
+        "fallback_used": False,
+        "effective_planner": getattr(planner, "name", "deterministic_rules"),
     }
+    selected = planner or RulePlanner()
+    fallback_enabled = (
+        getattr(selected, "fallback_on_failure", False)
+        if allow_fallback is None
+        else allow_fallback
+    )
+
+    def fallback():
+        if not fallback_enabled:
+            return None
+        record.update(fallback_used=True, effective_planner="deterministic_rules")
+        return validate_query_plan(request_plan(question), question)
+
     try:
         if not isinstance(question, str) or not question.strip() or len(question) > 2000:
             record.update(
@@ -33,20 +53,41 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0):
                 failure_behavior="Enter a supported supply-chain question, at most 2,000 characters.",
             )
             return record
-        record["retrieved_schema"] = (retriever or SchemaRetriever()).retrieve(question)
-        record["model_output"] = (planner or RulePlanner()).generate(
-            question, record["retrieved_schema"]
-        )
         try:
-            plan = validate_plan(record["model_output"])
-            record["json_validation"] = "passed"
+            record["retrieved_schema"] = (retriever or SchemaRetriever()).retrieve(question)
+            record["model_output"] = (
+                selected.query_plan(question)
+                if type(selected) is RulePlanner
+                else selected.generate(question, record["retrieved_schema"])
+            )
         except Exception as exc:
             record.update(
-                json_validation="failed",
+                status="unavailable",
                 abstained=True,
-                failure_behavior=f"Invalid planner JSON: {type(exc).__name__}",
+                failure_behavior=f"Planner or retrieval unavailable: {type(exc).__name__}: {exc}",
             )
+            query_plan = fallback()
+        else:
+            try:
+                candidate = validate_query_plan(record["model_output"])
+                record.update(json_validation="passed", candidate_query_plan=candidate)
+                query_plan = validate_query_plan(candidate, question)
+                record["plan_validation"] = "passed"
+            except Exception as exc:
+                record.update(
+                    json_validation="failed"
+                    if record["candidate_query_plan"] is None
+                    else "passed",
+                    plan_validation="failed",
+                    abstained=True,
+                    failure_behavior=f"Invalid QueryPlan: {type(exc).__name__}: {getattr(exc, 'message', str(exc))}",
+                )
+                query_plan = fallback()
+        if query_plan is None:
             return record
+        record["query_plan"] = query_plan
+        plan = compile_query_plan(query_plan)
+        record["compiled_plan"] = plan
         if plan["abstain"] or plan["needs_clarification"]:
             record.update(
                 status="blocked" if plan["intent"] == "unsafe" else "clarification",
@@ -55,6 +96,7 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0):
                 failure_behavior="No SQL executed. Read-only supply-chain questions only; specify a supported metric and entity.",
             )
             return record
+        record.update(abstained=False, clarified=False)
         try:
             guard_sql(plan["sql"], plan["parameters"])
             record["sql_validation"] = "passed"

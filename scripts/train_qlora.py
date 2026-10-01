@@ -7,6 +7,26 @@ from pathlib import Path
 from sentinel.config import PLANNER_MODEL, SEED
 
 
+def validate_instruction_splits(data):
+    from sentinel.nlq.query_plan import validate_query_plan
+
+    questions = {}
+    for split in ("train", "validation", "test"):
+        questions[split] = set()
+        for row in data[split]:
+            if row.get("contract") != "sql_free_query_plan_v1":
+                raise ValueError(
+                    "Regenerate SQL-free QueryPlan instructions; legacy SQL targets are unsupported"
+                )
+            validate_query_plan(row["messages"][-1]["content"], row["question"])
+            questions[split].add(row["question"].casefold().rstrip("?.!"))
+    if any(
+        questions[a] & questions[b]
+        for a, b in (("train", "validation"), ("train", "test"), ("validation", "test"))
+    ):
+        raise ValueError("Question leakage between instruction splits")
+
+
 def encode_example(tokenizer, example, max_length=4096):
     messages = example["messages"]
     prompt = tokenizer.apply_chat_template(messages[:-1], tokenize=True, add_generation_prompt=True)
@@ -26,7 +46,7 @@ def encode_example(tokenizer, example, max_length=4096):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", type=Path, default=Path("data/training"))
+    parser.add_argument("--data", type=Path, default=Path("data/training/query_plan_v1"))
     parser.add_argument("--output", type=Path, default=Path("models/sentinel-qlora"))
     parser.add_argument("--epochs", type=float, default=1)
     parser.add_argument("--max-length", type=int, default=4096)
@@ -52,10 +72,11 @@ def main():
     set_seed(SEED)
     data = load_dataset(
         "json",
-        data_files={split: str(args.data / f"{split}.jsonl") for split in ("train", "validation")},
+        data_files={
+            split: str(args.data / f"{split}.jsonl") for split in ("train", "validation", "test")
+        },
     )
-    if set(data["train"]["entity_group"]) & set(data["validation"]["entity_group"]):
-        raise ValueError("Entity leakage between training and validation")
+    validate_instruction_splits(data)
     tokenizer = AutoTokenizer.from_pretrained(PLANNER_MODEL)
     tokenizer.pad_token = tokenizer.eos_token
     encoded = data.map(

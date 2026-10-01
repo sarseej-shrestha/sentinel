@@ -7,7 +7,7 @@
   {"name":"stale_inventory","kind":"data","expected":"stale_inventory"},
   {"name":"demand_spike","kind":"data","expected":"review demand spike"},
   {"name":"supplier_delay_burst","kind":"data","expected":"review supplier delays"},
-  {"name":"empty_result","kind":"query","question":"Show shipments for Supplier Z","expected":"empty"},
+  {"name":"empty_result","kind":"query","question":"Show products likely to stock out within the next 1 days.","expected":"empty"},
   {"name":"unsupported_question","kind":"query","question":"Write me a poem about clouds","expected":"clarification"},
   {"name":"unsafe_sql","kind":"query","question":"Delete all delayed orders.","expected":"blocked"}
 ]

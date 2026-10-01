@@ -4,13 +4,13 @@ Sentinel is a human-approved, read-only supply-chain operations console for CMPS
 
 ## Current Phase 2 status
 
-The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a validated planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and a reproducible technical spike. The current suite passes 121 tests.
+The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a constrained SQL-free planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and reproducible evaluation. The current suite passes 204 tests (121 existing tests plus 83 new contract/training checks).
 
 Eleven core Kaggle datasets were downloaded and profiled locally. The backorder competition returned `UnauthenticatedError`; nine benchmark competitions are registered but unattempted. No Kaggle records enter the executable demo or training examples.
 
 The measured spike used deterministic planning and lexical retrieval: 36/36 expected behaviors, 6/6 unsafe cases blocked, 24/24 correct abstentions. SQL execution completed in 18/21 cases; the other three were intentional timeouts. These are smoke-test counts, not general accuracy claims. [Technical-spike findings](docs/technical_spike.md) include measured latency and limitations.
 
-Qwen and BGE were provisioned and genuinely executed on this macOS arm64 host's Apple M4 Max GPU. The unchanged base planner failed the strict JSON contract on all 21 measured generations because it emitted Markdown-fenced JSON. All became audited abstentions; none of its SQL executed and no deterministic fallback was substituted. Static inspection also found incorrect metrics, entity filters and missing analysis inputs. The base-model path is not ready for successful end-to-end use. QLoRA was not run because the existing recipe requires CUDA. Training examples were previously generated and validated (360 training, 90 validation, 90 test); no fine-tuning result is claimed.
+Qwen and BGE were genuinely evaluated on this host's Apple M4 Max GPU. Qwen now proposes SQL-free `QueryPlan` objects, never executable SQL. On 24 gold requests repeated three times, 36/72 model outputs passed the plan schema and per-intent constraints; 24/72 exactly matched the intended semantics, including 18/45 supported runs. Explicit deterministic fallback was needed in 48/72 runs. The complete system matched reference query results in 45/45 supported runs and abstained on all 27 negative runs, including six destructive requests. Those system successes must not be credited to Qwen. The model is **not ready** as an independent planner. QLoRA has not run; the existing recipe requires CUDA. The old SQL training targets have been replaced by a small, validated SQL-free instruction pilot.
 
 ## Scope
 
@@ -20,11 +20,12 @@ Excluded: real company data claims, healthcare data, external actions, autonomou
 
 ## Architecture and model stack
 
-The request path is: question → relevant schema and metrics → JSON plan → AST SQL checks → isolated read-only DuckDB query → verified evidence → deterministic recommendation → human simulation gate → audit snapshot.
+The request path is: question → BGE-retrieved schema and metrics → SQL-free QueryPlan → schema, alias and request-grounding checks → deterministic SQL compiler → AST SQL checks → isolated read-only DuckDB query → verified evidence → deterministic recommendation → human simulation gate → audit snapshot.
 
 | Component | Implementation |
 | --- | --- |
-| Planner | `Qwen/Qwen2.5-Coder-1.5B-Instruct` interface; explicitly labeled deterministic rules for offline execution |
+| Planner | `Qwen/Qwen2.5-Coder-1.5B-Instruct` proposes intent, entities, dates, metrics and scenario parameters; explicitly labeled deterministic fallback |
+| Plan compiler | Strict JSON Schema and per-intent requirements; canonical IDs; full-request grounding; fixed SQL templates and bound values only |
 | Retrieval | `BAAI/bge-small-en-v1.5` interface; lexical TF-IDF baseline for offline execution |
 | SQL safety | SQLGlot AST and column validation, four-view allowlist, documented equality joins, named parameters, maximum 200 rows, three-second worker deadline |
 | Execution | Read-only DuckDB; external access and automatic extension loading disabled; worker termination on timeout |
@@ -34,6 +35,8 @@ The request path is: question → relevant schema and metrics → JSON plan → 
 | Audit | Hash-linked local events and immutable snapshot replay through the application; named reviewer for simulated decisions |
 
 Canonical tables: `orders`, `order_items`, `shipments`, `products`, `suppliers`, `warehouses`, `inventory_daily`, `demand_daily`, `purchase_orders`, `supplier_events`, `promotions`, `calendar`, `risk_events`, `audit_events`. The four permitted query views are `risk_view`, `demand_view`, `supplier_view`, and `shipment_view`. Every base table includes source, record, synthetic entity, quality, missing-field count and timestamp provenance.
+
+The output adapter accepts raw JSON or one complete JSON Markdown fence, but rejects surrounding prose, duplicate keys, malformed objects and extra fields. Syntactic validity alone does not authorize execution. Plans must match the question's supported intent, complete filters, half-open dates and explicit scenario quantity. Canonical demo IDs are `S1`–`S3`, `W1`–`W3` and `P1`–`P6`; for example, Supplier A maps to `S1` and Warehouse 3 to `W3`. Missing/unknown entities clarify; they are not silently replaced. No model-provided SQL, table, column or function can reach execution.
 
 ## Install and build
 
@@ -60,7 +63,7 @@ python -m sentinel ask 'Forecast demand for Product P1 at Warehouse 3'
 python -m sentinel ask 'Delete all delayed orders.'
 ```
 
-The offline planner recognizes these forms, shipment queries such as `Show shipments for Supplier Z`, and `Show shipments missing promised delivery dates`. Other forms clarify or abstain. A stockout result means low estimated inventory coverage, not a guaranteed future stockout.
+The offline planner recognizes these forms, bounded paraphrases in `data/sample/query_plan_gold.json`, shipment queries such as `Show shipments for Supplier A`, and `Show shipments missing promised delivery dates`. Unknown names such as Supplier Z clarify. `Show products likely to stock out within the next 1 days.` returns an audited empty-result abstention on the default fixture. Other forms clarify or abstain. A stockout result means low estimated inventory coverage, not a guaranteed future stockout.
 
 `--propose` records a pending simulated action and prints its `action_id`. Supply that ID and your reviewer name explicitly:
 
@@ -97,6 +100,7 @@ No credentials or environment variables are required for the offline demo.
 | `KAGGLEHUB_CACHE` | Optional cache path; downloader defaults to ignored `data/raw/cache` |
 | `HF_TOKEN` | Optional Hugging Face token for model access, if required |
 | `HF_HOME` | Optional model cache location; keep outside Git |
+| `HF_HUB_OFFLINE`, `HF_DATASETS_OFFLINE` | Set to `1` after provisioning to prevent model-library network lookups |
 
 Set secrets privately through your environment or the service's credential store. Never paste credentials into source, notebook outputs, commits or the manifest.
 
@@ -122,8 +126,9 @@ On a suitable host, install the optional model dependencies and explicitly downl
 python -m pip install -e '.[models]'
 python -c 'from sentinel.nlq.planner import QwenPlanner; QwenPlanner(local_files_only=False)'
 python -c 'from sentinel.nlq.retrieval import SchemaRetriever; SchemaRetriever("bge", local_files_only=False)'
-python -m sentinel ask 'Why is Supplier A considered high risk?' --backend qwen --retrieval bge
-python scripts/run_technical_spike.py --backend qwen --retrieval bge --output artifacts/model_spike
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m sentinel ask 'Why is Supplier A considered high risk?' --backend qwen --retrieval bge
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python scripts/evaluate_query_plans.py --backend qwen --retrieval bge --repeats 3 --output artifacts/query_plan_evaluation
+python scripts/evaluate_query_plans.py --backend rules --retrieval lexical --repeats 1 --output artifacts/query_plan_reference
 ```
 
 The declared `models` extra installed successfully with Python 3.14.3 on macOS 15.6. The tested versions were `torch==2.14.1`, `transformers==4.57.6`, `sentence-transformers==5.7.0`, `accelerate==1.15.0`, `peft==0.21.1`, `datasets==5.0.1`, `tokenizers==0.22.2`, `huggingface-hub==0.36.2`, and `safetensors==0.8.0`. The extra uses version ranges, so a later installation may resolve differently. The Linux-only bitsandbytes dependency was not installed on macOS.
@@ -136,9 +141,24 @@ python -c 'import torch; print("MPS:", torch.backends.mps.is_available(), "CUDA:
 
 A restricted process may report MPS unavailable even when the host supports it. The measured run used a normal GPU-enabled process: both models loaded on `mps:0`, with Qwen in bfloat16. Weights stayed in the default Hugging Face cache, outside this repository (approximately 2.9 GiB for Qwen and 128 MiB for BGE). No API key was required. Qwen revision: `2e1fd397ee46e1388853d2af2c993145b0f1098a`; BGE revision: `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a`.
 
-The base-model measurement used the five supported example requests (including forecasting), plus unsupported and destructive requests, repeated three times. End-to-end latency including retrieval, generation, validation and audit was min 1,468.04 ms, mean 2,459.57 ms, median 2,500.53 ms, p95 3,263.43 ms, max 5,215.74 ms; these are abstention latencies, not successful-answer timings. Structured validity was 0/21 and supported SQL acceptance was 0/15. BGE retrieved the expected view first in 12/15 supported calls and within its top three in 15/15; repetitions are not independent accuracy samples. All three destructive requests were stopped at JSON validation. Separate static inspection confirmed the generated DELETE was also rejected by the SQL guard, without executing it. An explicitly injected unavailable-model case also produced an audited abstention. The local measurement artifacts are intentionally not committed.
+The previous direct-SQL spike produced 0/21 accepted outputs and 0/15 supported successes; fenced formatting and semantic errors both contributed. Its mean latency was 2,459.57 ms, measuring abstentions, not successful answers. The new SQL-free run used 15 supported requests plus nine unsupported, incomplete, unknown-entity or destructive requests, each repeated three times:
 
-Runtime defaults to local-only model loading. Missing dependencies or weights produce an unavailable result; a requested Qwen run is never relabeled as successful model inference through a rules fallback. The explicit failure-injection cases still use their test doubles.
+| Measurement | Actual result |
+| --- | --- |
+| QueryPlan schema and per-intent validity | 36/72 (50%) |
+| Exact semantic match, before fallback | 24/72 (33.33%); supported only 18/45 (40%) |
+| Fallback use | 48/72 (66.67%); supported only 27/45 (60%) |
+| Model abstention or contract rejection | 54/72 (75%) |
+| Final system abstention | 27/72; all 27 negative cases |
+| Unsafe requests rejected without execution | 6/6 |
+| Supported query results matching gold, including fallback | 45/45 |
+| BGE expected view retrieval | top one 30/45; top three 45/45 supported calls |
+| End-to-end latency, milliseconds | min 2,180.15; mean 3,892.26; median 4,012.52; p95 4,683.74; max 11,512.92 |
+| Audit-chain verification | 117 events verified |
+
+Latency includes retrieval, generation, validation, compilation, SQL, analytics and audit; model initialization was measured separately at 3,513.79 ms. The before/after sets and completed work differ, so this is not a controlled speed comparison. Deterministic reference evaluation passed 24/24 plans and 15/15 supported requests without fallback. These are small development-set measurements, not unseen-language accuracy: decoding is greedy, repeats were identical, and the prompt was developed against this set. Gold query rows are compared using the same trusted compiler; separate fixture tests assert the monthly counts. Reports contain raw outputs, retrieved context, model revisions, plans, fallback flags, query rows and source fingerprints. Source changes during evaluation abort the run. Measurements and replay exports stay ignored; choose a new output directory for each run.
+
+Runtime defaults to local-only loading. Invalid or unavailable Qwen output uses the same validated deterministic fallback when the request is supported; unsupported requests still abstain. Audit records preserve `model_output`, `candidate_query_plan`, `plan_validation`, `fallback_used`, `effective_planner` and the compiled plan, so fallback success is never reported as successful model inference. Evaluation stops if the real model cannot load; it does not replace the measured backend with fixtures. The older technical-spike harness retains explicitly labeled failure injections.
 
 QLoRA requires a compatible NVIDIA CUDA environment for this recipe:
 
@@ -148,7 +168,9 @@ python scripts/train_qlora.py --epochs 1 --max-length 4096
 python -m sentinel ask 'Why is Supplier A considered high risk?' --backend qwen --adapter models/sentinel-qlora
 ```
 
-Training uses PEFT LoRA over a 4-bit NF4 base model, fixed seeds, prompt-masked targets, and separate entity groups for train/validation/test. Generated records are JSON/SQL-validated. Examples exceeding the context budget fail explicitly. The script writes actual training/evaluation metrics only after execution. Template overlap across splits remains a generalization limitation; validation loss is not SQL accuracy. CPU-only hosts exit with a clear not-run reason.
+The generator now writes `data/training/query_plan_v1` (15 train, 13 validation, 13 test examples): natural language to QueryPlan, aliases, date expressions, required-field abstentions, unknown entities, unsupported and destructive requests. No raw Kaggle rows or SQL targets are used. The training preflight rejects legacy contracts and invalid plans. Exact target questions are disjoint across splits and excluded from the gold set, but templates and shared few-shot context overlap; these are not entity-held-out splits. This 41-example pilot is not sufficient evidence of training readiness.
+
+Training uses PEFT LoRA over a 4-bit NF4 base model, fixed seeds and prompt-masked targets. Examples exceeding the context budget fail explicitly. The script writes actual training/evaluation metrics only after execution. Validation loss is not planning accuracy. Hosts without CUDA exit with a clear not-run reason. QLoRA is a plausible next experiment given the remaining contract errors, not an established remedy: first expand curated examples and freeze an unseen evaluation set. No adapter was trained or evaluated in this pass.
 
 ## Verification and intentionally uncommitted files
 
@@ -160,10 +182,11 @@ Raw downloads, local profiles, databases, training JSONL, model weights/adapters
 
 ## Known limitations
 
-- Qwen/BGE inference is measured, but the unchanged base planner returned no accepted answers in this sample. Markdown fences violate the raw JSON contract, and removing them alone would not resolve the observed semantic errors. CUDA fine-tuning remains unmeasured.
+- Qwen still failed exact semantics on 27/45 supported runs. Wrong horizons, incomplete evidence requirements, extra filters/keys and incorrect intents were rejected or handled by labeled fallback. CUDA fine-tuning remains unmeasured.
+- Semantic grounding deliberately uses a full-request grammar and a fixed catalog. Unknown paraphrases and additional qualifiers abstain, even if a model could interpret them. Forecasts require both product and warehouse and use 14 days; what-if supports explicit demand increases only, not supplier-delay scenarios.
 - Risk calibration and forecast evaluation use synthetic distributions and do not establish real operational validity. Forecast quantile bounds under-covered in the measured spike; no confidence percentage is shown.
-- SQL deliberately excludes CTEs, nested queries, arbitrary functions, cross joins and noncatalog joins. Model output may be rejected even when syntactically valid SQL.
+- SQL deliberately excludes CTEs, nested queries, arbitrary functions, cross joins and noncatalog joins. Model SQL is never accepted; only compiled, AST-validated templates execute.
 - Fixed dates, small entity counts, no authenticated reviewer identity, no concurrent-user workflow, and no external audit anchor. Local database owners can rewrite the database; the hash chain detects accidental edits, not a fully privileged adversary.
 - Repeated spike inputs are smoke tests. Timings include process startup and depend on hardware, interpreter and imports. Sparse history, invalid dates, stale stock and missing fields require review.
 
-Next model work, separately scoped: address the observed structured-output and semantic-planning failures, then repeat base-model evaluation on unseen paraphrases before attempting fine-tuning. Forecast interval coverage also remains a limitation. Presentation and visual-design work remain a separate phase.
+Next model work: expand curated QueryPlan instructions and a genuinely unseen evaluation set before deciding whether a CUDA QLoRA experiment is worthwhile. Keep deterministic fallback enabled. Forecast interval coverage also remains a limitation. Presentation and visual-design work remain a separate phase.

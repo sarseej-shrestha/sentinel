@@ -30,7 +30,7 @@ def main():
     args = parser.parse_args()
     console = Console(args.database)
     if args.command == "ask":
-        from sentinel.nlq.planner import QwenPlanner
+        from sentinel.nlq.planner import QwenPlanner, UnavailablePlanner
         from sentinel.nlq.retrieval import SchemaRetriever
 
         try:
@@ -38,14 +38,11 @@ def main():
                 console.planner = QwenPlanner(adapter=args.adapter)
             console.retriever = SchemaRetriever(args.retrieval)
         except (ImportError, OSError) as exc:
-            result = {
-                "status": "unavailable",
-                "abstained": True,
-                "failure_behavior": f"Requested model unavailable: {type(exc).__name__}. Install model dependencies and download weights first.",
-            }
-            console.audit.append("model_unavailable", result)
-            print(json.dumps(result, indent=2))
-            return
+            console.planner = UnavailablePlanner(
+                f"Requested model or retrieval unavailable: {type(exc).__name__}. "
+                "Using the bounded deterministic planner and lexical retrieval."
+            )
+            console.retriever = SchemaRetriever("lexical")
         result = console.question(args.question)
         if args.propose and result.get("recommendations"):
             result["pending_action"] = console.gate.propose(result["recommendations"][0])

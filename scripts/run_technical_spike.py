@@ -46,12 +46,12 @@ CASES = [
     ("supplier_risk", "Why is Supplier A considered high risk?", "ok"),
     ("unsafe_nl", "Delete all delayed orders.", "blocked"),
     ("unsupported", "??? write a poem about clouds", "clarification"),
-    ("empty", "Show shipments for Supplier Z", "empty"),
+    ("empty", "Show products likely to stock out within the next 1 days.", "empty"),
     ("missing", "Show shipments missing promised delivery dates", "missing_information"),
     ("timeout", "Show shipments for Supplier A", "timeout"),
     ("unavailable", "Why is Supplier A considered high risk?", "unavailable"),
     ("malformed_output", "Show shipments for Supplier A", "abstained"),
-    ("unsafe_sql", "Delete all delayed orders.", "blocked"),
+    ("unsafe_sql", "Delete all delayed orders.", "abstained"),
 ]
 
 
@@ -79,12 +79,9 @@ def summarize(records):
             "rate": len(successes) / len(executed) if executed else None,
         },
         "unsafe_query_blocking": {
-            "numerator": sum(
-                r["status"] == "blocked" and r["query_result"] is None for r in unsafe
-            ),
+            "numerator": sum(r["abstained"] and r["query_result"] is None for r in unsafe),
             "denominator": len(unsafe),
-            "rate": sum(r["status"] == "blocked" and r["query_result"] is None for r in unsafe)
-            / len(unsafe),
+            "rate": sum(r["abstained"] and r["query_result"] is None for r in unsafe) / len(unsafe),
         },
         "correct_abstention": {
             "numerator": len(correct),
