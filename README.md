@@ -10,7 +10,7 @@ Eleven core Kaggle datasets were downloaded and profiled locally. The backorder 
 
 The measured spike used deterministic planning and lexical retrieval: 36/36 expected behaviors, 6/6 unsafe cases blocked, 24/24 correct abstentions. SQL execution completed in 18/21 cases; the other three were intentional timeouts. These are smoke-test counts, not general accuracy claims. [Technical-spike findings](docs/technical_spike.md) include measured latency and limitations.
 
-Qwen and BGE were genuinely evaluated on this host's Apple M4 Max GPU. Qwen proposes SQL-free `QueryPlan` objects, never executable SQL. On the original 24-case development set repeated three times, 36/72 model outputs passed the plan schema and per-intent constraints; 24/72 exactly matched intended semantics, including 18/45 supported runs. Those development results do not generalize to the new 48-case frozen comparison below: its zero-shot and experimental grounded-prompt arms both achieved 0/30 supported exact matches. Rules and paired fallback achieved 8/30, exposing limited grammar coverage. All negative cases abstained safely. The model is **not ready** as an independent planner, and the experimental prompt was not promoted. QLoRA has not run. The instruction set has expanded from 41 to 141 SQL-free examples.
+Qwen and BGE were genuinely evaluated on this host's Apple M4 Max GPU. Qwen proposes SQL-free `QueryPlan` objects, never executable SQL. On the original 24-case development set repeated three times, 36/72 model outputs passed the plan schema and per-intent constraints; 24/72 exactly matched intended semantics, including 18/45 supported runs. Those development results do not generalize to the 48-case frozen comparison below: its zero-shot and experimental grounded-prompt arms both remain at 0/30 supported exact matches. Development-grounded parser changes improved rules and paired fallback from 8/30 to 14/30, but coverage remains limited. All negative cases abstained safely. The model is **not ready** as an independent planner, and the experimental prompt was not promoted. QLoRA has not run. The instruction set contains 141 SQL-free examples.
 
 ## Scope
 
@@ -170,7 +170,7 @@ python -m scripts.compare_query_plans --rules-only --output artifacts/heldout_ru
 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m scripts.compare_query_plans --repeats 1 --output artifacts/heldout_comparison
 ```
 
-Use a fresh output directory; existing evaluation databases are never overwritten. The new comparison uses the same unmodified Qwen Instruct weights for a zero-shot contract/catalog arm and a detailed-prompt + four training-only examples + BGE arm. The deterministic arm uses unchanged rules. The fallback arm replays the exact grounded generation through the unchanged product gate with fallback enabled, isolating the effect of fallback without generating a different answer. No gold labels enter prompts or grant execution authority. The detailed prompt is experimental and is not installed in the production console.
+Use a fresh output directory; existing evaluation databases are never overwritten. The comparison uses the same unmodified Qwen Instruct weights for a zero-shot contract/catalog arm and a detailed-prompt + four training-only examples + BGE arm. The deterministic arm uses the current bounded parser. The fallback arm replays the exact grounded generation through the product gate with fallback enabled, isolating the effect of fallback without generating a different answer. No gold labels enter prompts or grant execution authority. The detailed prompt is experimental and is not installed in the production console.
 
 Model-only semantic scores compare canonical proposals with independent labels **before** production phrase grounding. Product acceptance and selected fallback-plan scores are separate: unfamiliar but representable requests can receive correct model proposals and still abstain through the unchanged safety gate. Invalid JSON gets no correct-negative-plan credit merely for being rejected. Unsafe-request rejection measures the complete guard, not model compliance. Reports include per-category numerators/denominators, raw generations, prompts, retrieval, source hashes, memory and latency. Fallback latency includes the observed shared inference cost plus separately measured replay; it is not an independent model call. One greedy pass measures 48 unique requests per arm, not a statistical generalization guarantee. Do not tune against these revealed results; freeze another unseen set for future iteration.
 
@@ -197,13 +197,59 @@ python -m scripts.evaluate_development --output artifacts/dev_snapshot.json
 python -m scripts.evaluate_development --baseline artifacts/dev_snapshot.json --output artifacts/dev_after.json
 ```
 
-This command loads only existing instruction/development cases, not the frozen holdout. Optional `--model-report PATH` diagnoses a saved real-model development report after verifying every question belongs to the existing development inventory. Reports and intermediate snapshots remain ignored. The semantic parser was developed against the 141 instruction cases: exact match improved from 87/141 to 141/141, including supported requests from 32/82 to 82/82. This is development fit, not unseen accuracy. The final holdout rerun follows the development freeze.
+This command loads only existing instruction/development cases, not the frozen holdout. Optional `--model-report PATH` diagnoses a saved real-model development report after verifying every question belongs to the existing development inventory. Reports and intermediate snapshots remain ignored. The semantic parser was developed against the 141 instruction cases: exact match improved from 87/141 to 141/141, including supported requests from 32/82 to 82/82. This is development fit, not unseen accuracy. Labels were captured before parser edits and reused for the after measurement.
 
 Additive diagnostics retain whole-plan exact match and report intent, canonical entities, date range, metrics, grouping, scenario, evidence, abstention and horizon matches. Scores include all cases and a separate applicable-field denominator to expose easy null-field matches. Missing fields never receive null-field credit. Safe fence removal, canonical aliases and order-independent metric lists use the existing contract conventions; duplicate fields/items and contract violations remain invalid. Partial field credit cannot authorize execution or count as whole-plan success.
 
 The overlapping error taxonomy covers wrong intent, entity normalization, missing filters, date range, metric, grouping, evidence, scenario parameters, incorrect abstention, unsupported acceptance and formatting, plus explicit contract violations. Unsupported acceptance describes a valid **proposal**, not a database action. On the prior 72-call real-model development report, exact match remained 24/72; observed errors included 36 entity mismatches, 27 wrong intents, 24 metric mismatches, 24 grouping mismatches and nine missing-evidence cases. No new training or model-quality improvement is implied by these diagnostics.
 
 The deterministic parser consumes canonical entity slots, number words, monthly/quarterly and bounded explicit dates, 14-day daily forecast horizons, inventory-coverage thresholds and explicit demand increases/multipliers. Unknown vocabulary, contradictory quantities, extra filters, negation and unsupported qualifiers abstain. Only existing allowlisted plans can be compiled. Tests cover every curated development case and adversarial modifications; two older tests now assert the invariant rather than requiring a particular held-out question to remain unrecognized. Qwen remains opt-in and experimental, with fallback enabled.
+
+### Final comparison after development freeze
+
+Development was committed as `afa0fc0` before one final 48-case pass, using unchanged prompts, model revisions and whole-plan scoring definitions:
+
+```sh
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m scripts.compare_query_plans --repeats 1 --output artifacts/heldout_semantics_final_v1
+```
+
+The holdout checksum remained `a5c51259c8d0a34ae667a208ad67a003fb921fbfebfbedf9dc7bd63bfd1e47dc`. No parser changes followed this evaluation. Earlier-session exposure to individual cases remains a benchmark limitation; this is not a perfectly untouched holdout.
+
+| Arm | Valid plans | Exact match, before → after | Supported match, before → after | Correct negative plan | Fallback, before → after |
+| --- | --- | --- | --- | --- | --- |
+| Qwen zero-shot | 0/48 | 0 → 0/48 | 0 → 0/30 | 0/18 | 0 → 0/48 |
+| Qwen grounded + BGE | 28/48 | 6 → 6/48 | 0 → 0/30 | 6/18 | 0 → 0/48 |
+| Deterministic | 48/48 | 25 → 31/48 | 8 → 14/30 | 17/18 | 0 → 0/48 |
+| Grounded + paired fallback | 48/48 | 25 → 31/48 | 8 → 14/30 | 17/18 | 27 → 31/48 |
+
+Supported exact match improved from 26.67% to 46.67% for rules/fallback. By intent, before → after out of six: supplier lateness 0 → 0, stockout 2 → 3, forecasting 2 → 5, supplier evidence 2 → 3, what-if 2 → 3. Qwen remains 0/6 in every supported category. All four arms safely abstained on 18/18 negative requests and rejected 6/6 unsafe requests without query execution. Rules/fallback still classify one unsafe paraphrase as unsupported: safe behavior, but no exact-label credit. Final system abstention was 34/48 for rules/fallback and 48/48 for model-only arms; 14 supported application results succeeded with validated plans.
+
+Field scores below use applicable/non-null target fields, except intent and abstention which cover all 48. Rules and selected fallback plans have identical scores. Model proposals are scored separately, including partial fields in rejected outputs; partial credit never authorizes execution. Zero-shot receives zero field credit. Retrospective field diagnostics on the saved `e759d7c` outputs use the same additive definitions.
+
+| Field | Rules/fallback before → after | Grounded Qwen, unchanged |
+| --- | --- | --- |
+| Intent | 25 → 31/48 | 17/48 |
+| Entities | 6 → 11/18 | 5/18 |
+| Time range | 0 → 0/6 | 2/6 |
+| Metrics | 8 → 14/30 | 12/30 |
+| Grouping | 8 → 14/30 | 11/30 |
+| Scenario | 2 → 3/6 | 0/6 |
+| Evidence requirements | 8 → 14/30 | 6/30 |
+| Abstention label | 26 → 32/48 | 22/48 |
+| Horizon | 4 → 8/12 | 3/12 |
+
+Actual request latency in milliseconds, including abstentions and successful analytics:
+
+| Arm | Minimum | Mean before → after | Median | p95 | Maximum |
+| --- | --- | --- | --- | --- | --- |
+| Zero-shot | 2,248.24 | 7,038.86 → 7,015.37 | 10,063.13 | 10,194.22 | 10,339.95 |
+| Grounded | 2,161.27 | 2,608.98 → 2,617.61 | 2,288.32 | 3,334.94 | 5,046.43 |
+| Rules | 14.74 | 225.55 → 392.57 | 67.17 | 1,226.42 | 1,364.48 |
+| Paired fallback | 2,138.70 | 2,764.84 → 2,905.58 | 2,812.66 | 4,267.12 | 5,001.75 |
+
+More rules/fallback requests now execute analytics instead of abstaining, so their higher mean is not an isolated parser-speed regression. This run made 96 genuine generations with no generation exceptions, plus 48 deterministic requests and 48 paired replays; 220 audit events verified. Initialization took 8,014.20 ms; peak process RSS was 5.36 GiB, not GPU-only memory. Both models loaded on `mps:0`. Regression tests ran afterward, not concurrently. The historical BGE 45/45 top-three result is from the earlier development set, not a new retrieval-quality claim for this holdout.
+
+QLoRA is not yet justified as a product fix: residual deterministic coverage and conservative request grounding remain architectural limits, while independent Qwen semantic accuracy is still zero here. The taxonomy identifies candidate learnable errors, but does not establish that training would fix them. Keep Qwen experimental and fallback enabled. Future development must use development cases and a newly frozen unseen evaluation, not these revealed holdout labels. Any separately authorized training must target SQL-free QueryPlan JSON and demonstrate improved semantics without safety or latency regressions.
 
 No QLoRA training is authorized by these evaluation commands. If separately approved later, the existing recipe requires a compatible NVIDIA CUDA environment:
 
