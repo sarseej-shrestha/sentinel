@@ -18,13 +18,34 @@ def validate_instruction_splits(data):
                 raise ValueError(
                     "Regenerate SQL-free QueryPlan instructions; legacy SQL targets are unsupported"
                 )
-            validate_query_plan(row["messages"][-1]["content"], row["question"])
+            if row.get("source") == "hand_curated_query_plan_v3":
+                from scripts.instruction_curation import seed_rows
+
+                labels = {r["id"]: r for r in seed_rows()}
+                label = labels.get(row["instruction_group"])
+                target = validate_query_plan(row["messages"][-1]["content"])
+                if not label or label["question"] != row["question"] or label["target"] != target:
+                    raise ValueError("Curated target differs from its reviewed source label")
+            else:
+                validate_query_plan(row["messages"][-1]["content"], row["question"])
             questions[split].add(row["question"].casefold().rstrip("?.!"))
     if any(
         questions[a] & questions[b]
         for a, b in (("train", "validation"), ("train", "test"), ("validation", "test"))
     ):
         raise ValueError("Question leakage between instruction splits")
+    if any(row.get("instruction_set") == "curated-v2" for row in data["train"]):
+        from scripts.evaluation_protocol import reject_holdout_leakage
+
+        reject_holdout_leakage(
+            [
+                json.loads(turn["content"])["question"]
+                for split in ("train", "validation", "test")
+                for row in data[split]
+                for turn in row["messages"]
+                if turn["role"] == "user"
+            ]
+        )
 
 
 def encode_example(tokenizer, example, max_length=4096):

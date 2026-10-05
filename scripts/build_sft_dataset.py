@@ -53,10 +53,16 @@ def examples():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", type=Path, default=Path("data/training/query_plan_v1"))
+    parser.add_argument("--version", choices=["pilot-v1", "curated-v2"], default="pilot-v1")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    args.output = args.output or Path(
+        "data/training/query_plan_v2"
+        if args.version == "curated-v2"
+        else "data/training/query_plan_v1"
+    )
     args.output.mkdir(parents=True, exist_ok=True)
-    rows = list(examples())
+    rows = list(curated_examples() if args.version == "curated-v2" else examples())
     random.Random(SEED).shuffle(rows)
     for split in ("train", "validation", "test"):
         selected = [row for kind, row in rows if kind == split]
@@ -64,6 +70,57 @@ def main():
             for row in selected:
                 stream.write(json.dumps(row) + "\n")
         print(split, len(selected))
+
+
+def curated_examples():
+    """Retain the pilot; add hand-labeled semantics without broadening runtime authority."""
+    from scripts.evaluation_protocol import normalized_question, reject_holdout_leakage
+    from scripts.instruction_curation import seed_rows
+    from scripts.plan_prompts import comparison_messages
+
+    rows = list(examples())
+    retriever = SchemaRetriever()
+    for split, row in rows:
+        row["category"] = json.loads(row["messages"][-1]["content"])["intent"]
+        row["instruction_set"] = "curated-v2"
+    for row in seed_rows():
+        turns = comparison_messages(
+            row["question"],
+            "grounded",
+            retriever.retrieve(row["question"]),
+            row.get("previous_output"),
+        )
+        rows.append(
+            (
+                row["split"],
+                {
+                    "source": "hand_curated_query_plan_v3",
+                    "contract": "sql_free_query_plan_v1",
+                    "instruction_set": "curated-v2",
+                    "instruction_group": row["id"],
+                    "category": row["category"],
+                    "question": row["question"],
+                    "messages": turns
+                    + [{"role": "assistant", "content": json.dumps(row["target"])}],
+                },
+            )
+        )
+    questions = [row["question"] for _, row in rows]
+    if len(set(map(normalized_question, questions))) != len(questions):
+        raise ValueError("Duplicate curated target question")
+    reject_holdout_leakage(questions)
+    # Check few-shot user messages too, not just final training targets.
+    reject_holdout_leakage(
+        [
+            json.loads(turn["content"])["question"]
+            for _, row in rows
+            for turn in row["messages"]
+            if turn["role"] == "user"
+        ]
+    )
+    for _, row in rows:
+        validate_query_plan(row["messages"][-1]["content"])
+    yield from rows
 
 
 if __name__ == "__main__":

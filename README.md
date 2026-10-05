@@ -4,13 +4,13 @@ Sentinel is a human-approved, read-only supply-chain operations console for CMPS
 
 ## Current Phase 2 status
 
-The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a constrained SQL-free planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and reproducible evaluation. The current suite passes 204 tests (121 existing tests plus 83 new contract/training checks).
+The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a constrained SQL-free planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and reproducible evaluation. The current suite passes 231 tests, including the original 204-test baseline and 27 new protocol/curation checks. Runtime behavior remains unchanged by the held-out evaluation work.
 
 Eleven core Kaggle datasets were downloaded and profiled locally. The backorder competition returned `UnauthenticatedError`; nine benchmark competitions are registered but unattempted. No Kaggle records enter the executable demo or training examples.
 
 The measured spike used deterministic planning and lexical retrieval: 36/36 expected behaviors, 6/6 unsafe cases blocked, 24/24 correct abstentions. SQL execution completed in 18/21 cases; the other three were intentional timeouts. These are smoke-test counts, not general accuracy claims. [Technical-spike findings](docs/technical_spike.md) include measured latency and limitations.
 
-Qwen and BGE were genuinely evaluated on this host's Apple M4 Max GPU. Qwen now proposes SQL-free `QueryPlan` objects, never executable SQL. On 24 gold requests repeated three times, 36/72 model outputs passed the plan schema and per-intent constraints; 24/72 exactly matched the intended semantics, including 18/45 supported runs. Explicit deterministic fallback was needed in 48/72 runs. The complete system matched reference query results in 45/45 supported runs and abstained on all 27 negative runs, including six destructive requests. Those system successes must not be credited to Qwen. The model is **not ready** as an independent planner. QLoRA has not run; the existing recipe requires CUDA. The old SQL training targets have been replaced by a small, validated SQL-free instruction pilot.
+Qwen and BGE were genuinely evaluated on this host's Apple M4 Max GPU. Qwen proposes SQL-free `QueryPlan` objects, never executable SQL. On the original 24-case development set repeated three times, 36/72 model outputs passed the plan schema and per-intent constraints; 24/72 exactly matched intended semantics, including 18/45 supported runs. Those development results do not generalize to the new 48-case frozen comparison below: its zero-shot and experimental grounded-prompt arms both achieved 0/30 supported exact matches. Rules and paired fallback achieved 8/30, exposing limited grammar coverage. All negative cases abstained safely. The model is **not ready** as an independent planner, and the experimental prompt was not promoted. QLoRA has not run. The instruction set has expanded from 41 to 141 SQL-free examples.
 
 ## Scope
 
@@ -160,17 +160,46 @@ Latency includes retrieval, generation, validation, compilation, SQL, analytics 
 
 Runtime defaults to local-only loading. Invalid or unavailable Qwen output uses the same validated deterministic fallback when the request is supported; unsupported requests still abstain. Audit records preserve `model_output`, `candidate_query_plan`, `plan_validation`, `fallback_used`, `effective_planner` and the compiled plan, so fallback success is never reported as successful model inference. Evaluation stops if the real model cannot load; it does not replace the measured backend with fixtures. The older technical-spike harness retains explicitly labeled failure injections.
 
-QLoRA requires a compatible NVIDIA CUDA environment for this recipe:
+### Frozen pretraining comparison
+
+The 48-case `data/sample/query_plan_heldout_v1.json` was frozen in commit `b9a65b2` before the instruction expansion or new prompt implementation. Its SHA-256 is checked by the loader. It contains six requests for each of supplier late-delivery rates, stockout coverage, daily forecasting, supplier evidence and demand what-if (30 supported semantic targets), plus six missing-field, three ambiguous, three unsupported and six unsafe requests. Cases carry canonical plans, required fields, abstention labels and evidence requirements. Aliases, date boundaries and multi-filter forecasts are included. Targets are manually specified independently of the phrase-matching planner.
 
 ```sh
-python scripts/build_sft_dataset.py
-python scripts/train_qlora.py --epochs 1 --max-length 4096
+python -m scripts.build_sft_dataset --version curated-v2
+python -m scripts.compare_query_plans --rules-only --output artifacts/heldout_rules
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m scripts.compare_query_plans --repeats 1 --output artifacts/heldout_comparison
+```
+
+Use a fresh output directory; existing evaluation databases are never overwritten. The new comparison uses the same unmodified Qwen Instruct weights for a zero-shot contract/catalog arm and a detailed-prompt + four training-only examples + BGE arm. The deterministic arm uses unchanged rules. The fallback arm replays the exact grounded generation through the unchanged product gate with fallback enabled, isolating the effect of fallback without generating a different answer. No gold labels enter prompts or grant execution authority. The detailed prompt is experimental and is not installed in the production console.
+
+Model-only semantic scores compare canonical proposals with independent labels **before** production phrase grounding. Product acceptance and selected fallback-plan scores are separate: unfamiliar but representable requests can receive correct model proposals and still abstain through the unchanged safety gate. Invalid JSON gets no correct-negative-plan credit merely for being rejected. Unsafe-request rejection measures the complete guard, not model compliance. Reports include per-category numerators/denominators, raw generations, prompts, retrieval, source hashes, memory and latency. Fallback latency includes the observed shared inference cost plus separately measured replay; it is not an independent model call. One greedy pass measures 48 unique requests per arm, not a statistical generalization guarantee. Do not tune against these revealed results; freeze another unseen set for future iteration.
+
+Actual frozen comparison: 96 real generations (48 per prompt), 48 rule requests and 48 paired fallback replays; no generation exception or fixture substitution. Model revisions were unchanged from the earlier spike. Initialization took 8,413.12 ms; peak process RSS was 5.13 GiB (not GPU-only memory). All 208 audit events verified.
+
+| Arm | Valid plans | Exact semantic match | Supported exact match | Correct negative plan | Fallback | Mean latency ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| Qwen zero-shot contract | 0/48 | 0/48 | 0/30 | 0/18 | 0/48 | 7,038.86 |
+| Qwen experimental prompt + BGE | 28/48 | 6/48 | 0/30 | 6/18 | 0/48 | 2,608.98 |
+| Deterministic rules | 48/48 | 25/48 | 8/30 | 17/18 | 0/48 | 225.55 |
+| Grounded output + paired fallback | 48/48 | 25/48 | 8/30 | 17/18 | 27/48 | 2,764.84 |
+
+All four arms safely abstained on 18/18 negative requests and rejected 6/6 unsafe requests without execution. The rules labeled one destructive paraphrase `unsupported` rather than `unsafe`, so it receives no exact-plan credit even though it was blocked. Both model arms scored 0/6 on each supported intent. Rules/fallback scored 0/6 supplier-delay, 2/6 stockout, 2/6 forecasting, 2/6 supplier-evidence and 2/6 what-if. Grounded exact negatives were 3/6 missing-field, 2/3 ambiguous, 1/3 unsupported and 0/6 unsafe. Rules/fallback were 6/6, 3/3, 3/3 and 5/6 respectively. The primary fallback scores describe selected application plans, not Qwen quality.
+
+Latency min/median/p95/max in milliseconds: zero-shot 2,180.13 / 10,046.32 / 10,357.63 / 10,456.73; grounded 2,122.68 / 2,288.75 / 3,379.05 / 5,052.79; rules 14.52 / 43.69 / 1,174.29 / 1,238.24; paired fallback 2,123.03 / 2,291.07 / 3,915.02 / 5,013.82. These single-host timings include abstentions; early calls shared the host with regression checks. Prompt detail, examples and retrieval change together, so this is not an isolated BGE ablation. The zero-shot arm frequently echoed schema metadata or emitted incomplete fenced output; the grounded arm frequently abstained incorrectly or supplied wrong/missing fields. Do not promote this prompt or infer that fine-tuning will fix it.
+
+The expanded instruction set contains 141 examples (93 train, 24 validation, 24 test): the retained 41-example pilot plus 100 individually authored additions. By curation category: supplier delay 11, stockout 17, forecast 13, supplier evidence 13, what-if 16, shipment evidence 3, missing fields 10, ambiguous 8, unsupported 23, unsafe 15, and malformed-output recovery 12. Recovery examples treat previous output as untrusted and regenerate only from supplied facts; incomplete requests abstain. They do not enable automatic repair in production. Targets are canonical SQL-free JSON; curated labels are checked independently of the narrow runtime grammar. Exact normalized holdout questions are excluded from targets and few-shot context. Source seeds stay in the generator code; generated JSONL stays ignored in `data/training/query_plan_v2`.
+
+No QLoRA training is authorized by these evaluation commands. If separately approved later, the existing recipe requires a compatible NVIDIA CUDA environment:
+
+```sh
+python -m scripts.build_sft_dataset --version curated-v2
+python -m scripts.train_qlora --data data/training/query_plan_v2 --epochs 1 --max-length 4096
 python -m sentinel ask 'Why is Supplier A considered high risk?' --backend qwen --adapter models/sentinel-qlora
 ```
 
-The generator now writes `data/training/query_plan_v1` (15 train, 13 validation, 13 test examples): natural language to QueryPlan, aliases, date expressions, required-field abstentions, unknown entities, unsupported and destructive requests. No raw Kaggle rows or SQL targets are used. The training preflight rejects legacy contracts and invalid plans. Exact target questions are disjoint across splits and excluded from the gold set, but templates and shared few-shot context overlap; these are not entity-held-out splits. This 41-example pilot is not sufficient evidence of training readiness.
+The original `python scripts/build_sft_dataset.py` command remains available for the 41-example pilot in `data/training/query_plan_v1`. No raw Kaggle rows or SQL targets are used in either version. The training preflight rejects legacy contracts, invalid plans, altered curated labels and frozen-holdout leakage. Target questions are disjoint across splits, but schema, entity vocabulary, templates and shared training-only few-shot context overlap; these are not entity-held-out splits.
 
-Training uses PEFT LoRA over a 4-bit NF4 base model, fixed seeds and prompt-masked targets. Examples exceeding the context budget fail explicitly. The script writes actual training/evaluation metrics only after execution. Validation loss is not planning accuracy. Hosts without CUDA exit with a clear not-run reason. QLoRA is a plausible next experiment given the remaining contract errors, not an established remedy: first expand curated examples and freeze an unseen evaluation set. No adapter was trained or evaluated in this pass.
+Training uses PEFT LoRA over a 4-bit NF4 base model, fixed seeds and prompt-masked targets. Examples exceeding the context budget fail explicitly. The script writes actual training/evaluation metrics only after execution. Validation loss is not planning accuracy. Hosts without CUDA exit with a clear not-run reason. No adapter was trained or evaluated in this pass. A future adapter must beat the base model on preserved semantic labels without regressing latency or safety; a completed training job alone is not evidence of usefulness. The runtime grammar remains an independent limit that fine-tuning cannot remove.
 
 ## Verification and intentionally uncommitted files
 
@@ -182,11 +211,11 @@ Raw downloads, local profiles, databases, training JSONL, model weights/adapters
 
 ## Known limitations
 
-- Qwen still failed exact semantics on 27/45 supported runs. Wrong horizons, incomplete evidence requirements, extra filters/keys and incorrect intents were rejected or handled by labeled fallback. CUDA fine-tuning remains unmeasured.
+- The frozen comparison found no supported exact matches for either experimental model arm. This is a different evaluation and prompt from the earlier 40% development result, not a controlled before/after accuracy comparison. CUDA fine-tuning remains unmeasured.
 - Semantic grounding deliberately uses a full-request grammar and a fixed catalog. Unknown paraphrases and additional qualifiers abstain, even if a model could interpret them. Forecasts require both product and warehouse and use 14 days; what-if supports explicit demand increases only, not supplier-delay scenarios.
 - Risk calibration and forecast evaluation use synthetic distributions and do not establish real operational validity. Forecast quantile bounds under-covered in the measured spike; no confidence percentage is shown.
 - SQL deliberately excludes CTEs, nested queries, arbitrary functions, cross joins and noncatalog joins. Model SQL is never accepted; only compiled, AST-validated templates execute.
 - Fixed dates, small entity counts, no authenticated reviewer identity, no concurrent-user workflow, and no external audit anchor. Local database owners can rewrite the database; the hash chain detects accidental edits, not a fully privileged adversary.
 - Repeated spike inputs are smoke tests. Timings include process startup and depend on hardware, interpreter and imports. Sparse history, invalid dates, stale stock and missing fields require review.
 
-Next model work: expand curated QueryPlan instructions and a genuinely unseen evaluation set before deciding whether a CUDA QLoRA experiment is worthwhile. Keep deterministic fallback enabled. Forecast interval coverage also remains a limitation. Presentation and visual-design work remain a separate phase.
+Next model work: review the frozen comparison and the separate runtime-coverage limitation before proposing any training. Preserve this evaluation set; use a new unseen set for prompt iteration. Keep deterministic fallback enabled, and reject any future adapter that fails the semantic, latency or safety comparison. Forecast interval coverage also remains a limitation. Presentation and visual-design work remain a separate phase.
