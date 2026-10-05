@@ -4,13 +4,66 @@ Sentinel is a human-approved, read-only supply-chain operations console for CMPS
 
 ## Current Phase 2 status
 
-The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a constrained SQL-free planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and reproducible evaluation. The current suite passes 376 tests: the preceding 231 plus 145 semantic-coverage/diagnostic regressions. Development-only semantic parsing now complements the original phrase forms; the QueryPlan contract, fixed SQL compiler, AST validation, evidence and approval protections remain unchanged.
+The executable coding work was implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a constrained SQL-free planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and reproducible evaluation. That branch retains its 376-test baseline. The separate `semantic-repair` branch passes 461 tests, adding 85 regressions and integrity checks without changing existing tests. Its versioned execution contract and date/supplier repair preserve the compiler, AST validation, evidence and approval protections.
 
 Eleven core Kaggle datasets were downloaded and profiled locally. The backorder competition returned `UnauthenticatedError`; nine benchmark competitions are registered but unattempted. No Kaggle records enter the executable demo or training examples.
 
 The measured spike used deterministic planning and lexical retrieval: 36/36 expected behaviors, 6/6 unsafe cases blocked, 24/24 correct abstentions. SQL execution completed in 18/21 cases; the other three were intentional timeouts. These are smoke-test counts, not general accuracy claims. [Technical-spike findings](docs/technical_spike.md) include measured latency and limitations.
 
 Qwen and BGE were genuinely evaluated on this host's Apple M4 Max GPU. Qwen proposes SQL-free `QueryPlan` objects, never executable SQL. On the original 24-case development set repeated three times, 36/72 model outputs passed the plan schema and per-intent constraints; 24/72 exactly matched intended semantics, including 18/45 supported runs. Those development results do not generalize to the 48-case frozen comparison below: its zero-shot and experimental grounded-prompt arms both remain at 0/30 supported exact matches. Development-grounded parser changes improved rules and paired fallback from 8/30 to 14/30, but coverage remains limited. All negative cases abstained safely. The model is **not ready** as an independent planner, and the experimental prompt was not promoted. QLoRA has not run. The instruction set contains 141 SQL-free examples.
+
+## Semantic-repair branch
+
+`semantic-repair` starts from the preserved 376-test tip `89f4064`, which includes `e759d7c`; it does not change `phase2-coding`. V1 SQL-free proposals and original evaluation labels remain compatible. Before compilation, the application creates and validates a V2 execution contract containing explicit granularity, date basis, supplier scope and abstention reason. Qwen is shadow-only: even an agreeing proposal leaves execution ownership with the deterministic planner, and disagreements remain in the audit record.
+
+Calendar normalization uses the fixed demo date, not the host clock. Internal intervals are always `[start, end)`. Natural-language explicit ranges include their final day unless marked exclusive; “past N days” means N completed days before the reference date. Last/this/next month, previous quarter and explicit dates normalize deterministically. Future historical queries abstain. Daily/weekly history granularity is retained by the date resolver, but those breakdowns currently abstain in the supplier aggregate template; daily 14-day demand forecasting is unchanged. Supplier lateness can filter one canonical supplier or explicitly represent all suppliers, using promised dates and evaluable observations, never invented risk probabilities.
+
+The registry resolves exact IDs, known aliases, then lexically evidenced catalog candidates. Embedding proximity alone cannot identify an unknown supplier or warehouse. BGE schema retrieval remains unchanged.
+
+```sh
+python -m scripts.evaluate_semantic_repair --development --output artifacts/repair_development
+# Compare a trusted detached baseline checkout, without changing the active branch:
+python -m scripts.evaluate_semantic_repair --development --source-root /path/to/baseline-checkout --output artifacts/repair_baseline
+```
+
+The worker receives questions only; expected plans stay in the scoring process. Use fresh output directories. This evaluation reports whole-plan and field matches separately, negative behavior, evidence linkage, audit verification and actual request latency. No fine-tuning runs.
+
+Development froze in `5a82962` before the new 39-case benchmark was created and checksum-frozen in `73e60ea`. It contains six supplier-lateness cases and four each for stockout, daily forecasting, supplier evidence and what-if (22 supported), plus four missing-field, four ambiguous/unsupported-granularity, three unsupported and six unsafe cases. Questions are disjoint from existing development questions and the original holdout. This is a post-development set from the same implementation author, not an independent blinded benchmark. No parser or prompt changes followed either final evaluation.
+
+```sh
+python -m scripts.evaluate_semantic_repair --benchmark data/sample/semantic_benchmark_v2.json --sha256 8185221a88cb0fa8908ef7c62ce2964f20cf0041e7c5abcf2ce4b2593fcb3c38 --output artifacts/repair_unseen
+# The final original-holdout run used this command once, after development:
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m scripts.compare_query_plans --repeats 1 --output artifacts/semantic_repair_original_holdout
+```
+
+New benchmark, deterministic baseline `89f4064` → repair:
+
+| Measurement | Before → after |
+| --- | --- |
+| Whole-plan exact match | 32/39 → 36/39 |
+| Supported exact match and successful answers | 15/22 → 19/22 (68.18% → 86.36%) |
+| Supplier-lateness match | 2/6 → 5/6 |
+| Stockout match | 3/4 → 4/4 |
+| Forecast / supplier evidence / what-if | Unchanged: 3/4 / 4/4 / 3/4 |
+| Applicable date fields | 2/6 → 5/6 |
+| Applicable entities | 10/14 → 11/14 |
+| Metrics, grouping, evidence requirements (each) | 15/22 → 19/22 |
+| Applicable scenario / horizon | 3/4 → 3/4; 6/8 → 7/8 |
+| Intent / abstention label (each) | 32/39 → 36/39 |
+| Negative-plan match and safe abstention | 17/17 → 17/17 |
+| Unsafe rejection | 6/6 → 6/6 |
+| Verified evidence linkage | 15/15 → 19/19 |
+| Verified audit events | 54 → 58 |
+
+These are deterministic results, not Qwen results. New-benchmark min/mean/median/p95/max latency was 13.85/169.95/28.22/430.19/496.15 ms before and 15.29/205.72/39.43/438.34/478.70 ms after. The repair completes four more analyses instead of abstaining. The three remaining supported misses abstained. Date resolver tests cover last/next/this month, past 30 completed days, previous quarter, daily/weekly history, explicit boundaries, ambiguity, missing dates, leap dates and year rollover. Development date/filter variations improved from 1/6 to 6/6 supported matches, retaining 4/4 correct negative plans. The original 141 instruction labels remain 141/141; neither figure is unseen accuracy.
+
+The existing overlapping taxonomy and field definitions were retained unchanged. On the saved 72-call real-model development report, diagnostic counts include 27 wrong intents, 36 wrong entities, three wrong dates, 24 wrong metrics, 24 wrong groupings, nine missing evidence requirements, three incorrect abstentions and three unsupported proposals incorrectly accepted by the proposal schema (not executed). The development date/filter baseline additionally exposed one missing filter and five incorrect abstentions; all ten development variants match after repair. Missing scenario fields, malformed outputs and unsupported acceptance remain explicitly classified and regression-tested.
+
+The original 48-case holdout was run once after development with genuine Qwen/BGE inference: **no accuracy change** versus `89f4064`. Rules and paired fallback remain 31/48 whole-plan, 14/30 supported, 17/18 negative-plan match, with supplier lateness still 0/6. Zero-shot Qwen remains 0/48 valid; grounded Qwen remains 28/48 valid, 6/48 exact and 0/30 supported. Fallback remains 31/48. All arms safely abstained on 18/18 negatives and blocked 6/6 unsafe requests. All 220 audit events and 28/28 recommendation-bearing evidence snapshots verified. Both original and new checksums remained unchanged; earlier-session exposure still limits the original benchmark's independence.
+
+Original-holdout latency min/mean/median/p95/max in milliseconds: zero-shot 2,215.66/6,987.17/9,975.72/10,159.65/10,192.09; grounded 2,124.48/2,598.94/2,274.65/3,307.82/5,011.21; rules 14.57/392.53/66.89/1,234.50/1,407.58; paired fallback 2,092.43/2,889.92/2,803.65/4,187.64/4,980.92. Model initialization was 5,947.68 ms, peak process RSS 6.34 GiB, and 96 real generations completed without exceptions on `mps:0`. Model revisions were unchanged. Qwen was not evaluated on the new 39-case benchmark; no model improvement is claimed. The earlier BGE 45/45 top-three figure remains a development-set measurement, not a new benchmark result.
+
+The measured repair passes regression, safety, evidence and audit checks and improves the new benchmark, but remains a limited experimental branch: the original supplier-lateness gap is unresolved and some paraphrases still abstain. Qwen stays shadow-only, fallback stays enabled, and QLoRA remains deferred—not demonstrated as a product fix. An independent new benchmark and broader development-only coverage are needed before promotion or a separately authorized SQL-free instruction-tuning experiment.
 
 ## Scope
 

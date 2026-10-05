@@ -3,6 +3,7 @@
 import time
 from dataclasses import asdict
 
+from sentinel.nlq.execution_contract import resolve_execution_plan
 from sentinel.nlq.executor import execute
 from sentinel.nlq.planner import RulePlanner
 from sentinel.nlq.query_plan import compile_query_plan, request_plan, validate_query_plan
@@ -30,6 +31,8 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
         "plan_validation": "not_run",
         "fallback_used": False,
         "effective_planner": getattr(planner, "name", "deterministic_rules"),
+        "resolved_query_plan": None,
+        "shadow_disagreement": None,
     }
     selected = planner or RulePlanner()
     fallback_enabled = (
@@ -51,6 +54,7 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
                 clarified=True,
                 abstained=True,
                 failure_behavior="Enter a supported supply-chain question, at most 2,000 characters.",
+                resolved_query_plan=resolve_execution_plan(question=question),
             )
             return record
         try:
@@ -65,6 +69,7 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
                 status="unavailable",
                 abstained=True,
                 failure_behavior=f"Planner or retrieval unavailable: {type(exc).__name__}: {exc}",
+                shadow_disagreement=True if getattr(selected, "shadow_mode", False) else None,
             )
             query_plan = fallback()
         else:
@@ -73,6 +78,11 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
                 record.update(json_validation="passed", candidate_query_plan=candidate)
                 query_plan = validate_query_plan(candidate, question)
                 record["plan_validation"] = "passed"
+                if getattr(selected, "shadow_mode", False):
+                    # Even agreement does not promote Qwen to the execution owner.
+                    query_plan = validate_query_plan(request_plan(question), question)
+                    record["effective_planner"] = "deterministic_rules"
+                    record["shadow_disagreement"] = False
             except Exception as exc:
                 record.update(
                     json_validation="failed"
@@ -81,12 +91,15 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
                     plan_validation="failed",
                     abstained=True,
                     failure_behavior=f"Invalid QueryPlan: {type(exc).__name__}: {getattr(exc, 'message', str(exc))}",
+                    shadow_disagreement=True if getattr(selected, "shadow_mode", False) else None,
                 )
                 query_plan = fallback()
         if query_plan is None:
+            record["resolved_query_plan"] = resolve_execution_plan()
             return record
         record["query_plan"] = query_plan
-        plan = compile_query_plan(query_plan)
+        record["resolved_query_plan"] = resolve_execution_plan(query_plan, question)
+        plan = compile_query_plan(record["resolved_query_plan"])
         record["compiled_plan"] = plan
         if plan["abstain"] or plan["needs_clarification"]:
             record.update(
