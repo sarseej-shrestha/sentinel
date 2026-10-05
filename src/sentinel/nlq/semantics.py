@@ -4,13 +4,11 @@ Unknown qualifiers are not dropped. This module supplies only canonical plan dat
 the existing contract, compiler, AST guard and read-only executor remain authoritative.
 """
 
-import calendar
 import re
-from datetime import date, timedelta
 
 from jsonschema import ValidationError
 
-from sentinel.config import AS_OF
+from sentinel.nlq.dates import historical_window
 
 NUMBERS = dict(
     zip(
@@ -18,8 +16,6 @@ NUMBERS = dict(
         range(1, 21),
     )
 )
-MONTHS = {name.lower(): i for i, name in enumerate(calendar.month_name) if name}
-MONTH = "(?:" + "|".join(MONTHS) + ")"
 ENTITY = re.compile(
     r"\b(?P<product>(?:synthetic\s+)?product\s+(?:p?\d+|[a-z])|p\d+)\b|"
     r"\b(?P<warehouse>warehouse\s+(?:w?\d+|[a-z])|w\d+)\b|"
@@ -39,13 +35,15 @@ VOCABULARY = {
 
 COMMON |= {"had", "we", "many", "when"}
 VOCABULARY["supplier_delay"] += " shipments promised"
-VOCABULARY["stockout"] += " whose hand quantity covers there fall"
+VOCABULARY["stockout"] += " whose hand quantity covers there fall coming"
 VOCABULARY["forecast"] += " look"
 VOCABULARY["what_if"] += " cover remains day model"
 
 
 def normalize(question):
     q = question.casefold().replace("’", "'")
+    # Catalog-backed stockout business alias; no new metric is inferred.
+    q = re.sub(r"\brunning out\b", "stockout", q)
     if re.search(r"(?<!\w)-\d", q):
         raise ValueError("Negative quantities are unsupported")
     q = re.sub(r"(?<!\d)-|-(?!\d)", " ", q)
@@ -81,61 +79,12 @@ def extract_entities(q):
     return entities, ENTITY.sub(replace, q).replace("'s", " ")
 
 
-def month_end(year, month):
-    return date(year + (month == 12), 1 if month == 12 else month + 1, 1)
-
-
 def date_range(q):
-    """Consume exactly one supported date expression and leave all other text visible."""
-    today = date.fromisoformat(AS_OF)
-    patterns = [
-        (
-            r"(?:last month|previous calendar month|calendar month before ("
-            + MONTH
-            + r") (\d{4}))",
-            "relative",
-        ),
-        (rf"first (\d+) days of ({MONTH}) (\d{{4}})", "prefix"),
-        (r"(first|second|third|fourth) quarter of (\d{4})", "quarter"),
-        (
-            r"(\d{4}-\d{2}-\d{2})\s+(?:through|to)\s+(\d{4}-\d{2}-\d{2})\s+(inclusive|exclusive)",
-            "iso",
-        ),
-        (
-            rf"({MONTH}) (\d+) and ({MONTH}) (\d+) inclusive\??[.;]? use (\d{{4}}) dates",
-            "named_days",
-        ),
-        (rf"({MONTH})(?: of)? (\d{{4}})", "month"),
-    ]
-    for pattern, kind in patterns:
-        match = re.search(pattern, q)
-        if not match:
-            continue
-        if kind == "relative":
-            end = date(int(match[2]), MONTHS[match[1]], 1) if match[1] else today.replace(day=1)
-            start = (end - timedelta(days=1)).replace(day=1)
-        elif kind == "prefix":
-            start = date(int(match[3]), MONTHS[match[2]], 1)
-            end = date(start.year, start.month, int(match[1])) + timedelta(days=1)
-        elif kind == "quarter":
-            month = 1 + 3 * ("first second third fourth".split().index(match[1]))
-            start = date(int(match[2]), month, 1)
-            end = month_end(start.year, month + 2)
-        elif kind == "iso":
-            start, end = date.fromisoformat(match[1]), date.fromisoformat(match[2])
-            end += timedelta(days=match[3] == "inclusive")
-        elif kind == "named_days":
-            start = date(int(match[5]), MONTHS[match[1]], int(match[2]))
-            end = date(int(match[5]), MONTHS[match[3]], int(match[4])) + timedelta(days=1)
-        else:
-            start = date(int(match[2]), MONTHS[match[1]], 1)
-            end = month_end(start.year, start.month)
-        if not start < end <= today + timedelta(days=1):
-            raise ValueError("Invalid or future date range")
-        return {"start": start.isoformat(), "end": end.isoformat()}, q[: match.start()] + " " + q[
-            match.end() :
-        ]
-    raise ValueError("Missing or ambiguous date range")
+    window, remaining = historical_window(q)
+    # A weekly/daily breakdown is not the same as one aggregate supplier rate.
+    if re.search(r"\b(?:daily|weekly) history\b", q):
+        raise ValueError("Supplier rate templates aggregate the complete requested period")
+    return window.boundaries(), remaining
 
 
 def coverage_horizon(q):
@@ -213,9 +162,11 @@ def parse_semantics(question):
             r"\b(risk|reliability|dependability|evidence|observations|flagged|reviewing)\b", q
         ):
             intent = "supplier_risk"
-        elif (re.search(r"\b(suppliers?|vendors?)\b", q) or "delivery promises" in q) and re.search(
-            r"\b(late|lateness|missed)\b", q
-        ):
+        elif (
+            entities["supplier_id"]
+            or re.search(r"\b(suppliers?|vendors?)\b", q)
+            or "delivery promises" in q
+        ) and re.search(r"\b(late|lateness|missed)\b", q):
             intent = "supplier_delay"
         elif re.search(r"\b(stock|inventory|stockout|coverage|covers?)\b", q):
             intent = "stockout"

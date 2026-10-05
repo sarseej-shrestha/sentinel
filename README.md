@@ -14,6 +14,22 @@ Qwen and BGE were genuinely evaluated on this host's Apple M4 Max GPU. Qwen prop
 
 ## Scope
 
+### Semantic-repair branch
+
+`semantic-repair` starts from the preserved 376-test tip `89f4064`, which includes `e759d7c`; it does not change `phase2-coding`. V1 SQL-free proposals and original evaluation labels remain compatible. Before compilation, the application creates and validates a V2 execution contract containing explicit granularity, date basis, supplier scope and abstention reason. Qwen is shadow-only: even an agreeing proposal leaves execution ownership with the deterministic planner, and disagreements remain in the audit record.
+
+Calendar normalization uses the fixed demo date, not the host clock. Internal intervals are always `[start, end)`. Natural-language explicit ranges include their final day unless marked exclusive; “past N days” means N completed days before the reference date. Last/this/next month, previous quarter and explicit dates normalize deterministically. Future historical queries abstain. Daily/weekly history granularity is retained by the date resolver, but those breakdowns currently abstain in the supplier aggregate template; daily 14-day demand forecasting is unchanged. Supplier lateness can filter one canonical supplier or explicitly represent all suppliers, using promised dates and evaluable observations, never invented risk probabilities.
+
+The registry resolves exact IDs, known aliases, then lexically evidenced catalog candidates. Embedding proximity alone cannot identify an unknown supplier or warehouse. BGE schema retrieval remains unchanged.
+
+```sh
+python -m scripts.evaluate_semantic_repair --development --output artifacts/repair_development
+# Compare a trusted detached baseline checkout, without changing the active branch:
+python -m scripts.evaluate_semantic_repair --development --source-root /path/to/baseline-checkout --output artifacts/repair_baseline
+```
+
+The worker receives questions only; expected plans stay in the scoring process. Use fresh output directories. This evaluation reports whole-plan and field matches separately, negative behavior, evidence linkage, audit verification and actual request latency. No fine-tuning runs.
+
 All purchasing, shipment changes, supplier changes and follow-up actions are simulations. Approval records a local decision only. Business tables remain read-only through the question interface; trusted setup creates the synthetic database and the application appends audit events.
 
 Excluded: real company data claims, healthcare data, external actions, autonomous operations, generic chat, voice, multi-model orchestration, and training an LLM from scratch. Presentation, PowerPoint, wireframes, user flows, and information architecture are outside this coding pass.

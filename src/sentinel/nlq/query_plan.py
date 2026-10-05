@@ -8,15 +8,8 @@ from datetime import date, timedelta
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 
 from sentinel.config import AS_OF
+from sentinel.nlq.registry import ENTITIES, resolve_entity
 
-ENTITIES = {
-    "supplier_id": {f"S{i}": [f"S{i}", f"Supplier {chr(64 + i)}"] for i in range(1, 4)},
-    "warehouse_id": {f"W{i}": [f"W{i}", f"Warehouse {i}", f"Warehouse W{i}"] for i in range(1, 4)},
-    "product_id": {
-        f"P{i}": [f"P{i}", f"Product {i}", f"Product P{i}", f"Synthetic Product {i}"]
-        for i in range(1, 7)
-    },
-}
 # Metric/dimension/evidence names describe semantics, never interpolated SQL identifiers.
 SPECS = {
     "supplier_delay": (
@@ -106,12 +99,7 @@ QUERY_PLAN_SCHEMA = object_schema(
 
 
 def canonical_entity(kind, value):
-    if value is None:
-        return None
-    for canonical, aliases in ENTITIES[kind].items():
-        if value.strip().casefold() in {alias.casefold() for alias in aliases}:
-            return canonical
-    raise ValueError(f"Unknown {kind}: {value}")
+    return resolve_entity(kind, value)
 
 
 def _unique_object(pairs):
@@ -173,6 +161,8 @@ def validate_query_plan(value, question=None):
         "what_if": {"warehouse_id"},
     }.get(intent, set())
     present = {key for key, value in result["entities"].items() if value is not None}
+    if intent == "supplier_delay" and present <= {"supplier_id"}:
+        required_entities = present
     if present != required_entities:
         raise ValueError(
             f"{intent} requires exactly these entity filters: {sorted(required_entities)}"
@@ -283,10 +273,18 @@ def request_plan(question):
 
 def compile_query_plan(value):
     """Only trusted literal templates become SQL. No model text is interpolated."""
+    # The execution contract makes implicit legacy defaults explicit. V1 proposal
+    # compatibility is retained for existing labels and model adapters.
+    from sentinel.nlq.execution_contract import resolve_execution_plan, validate_execution_plan
     from sentinel.nlq.planner import plan
     from sentinel.nlq.sql_guard import guard_sql
 
-    value = validate_query_plan(value)
+    resolved = (
+        validate_execution_plan(value)
+        if isinstance(value, dict) and "contract_version" in value
+        else resolve_execution_plan(value)
+    )
+    value = {key: resolved[key] for key in QUERY_PLAN_SCHEMA["properties"]}
     intent, entities = value["intent"], value["entities"]
     if value["abstain"]:
         return plan(intent, abstain=True, needs_clarification=intent == "unsupported")
@@ -297,6 +295,9 @@ def compile_query_plan(value):
             "start_date": value["time_range"]["start"],
             "end_date": value["time_range"]["end"],
         }
+        if entities["supplier_id"] is not None:
+            sql = sql.replace(" GROUP BY", " AND supplier_id = $supplier GROUP BY")
+            params["supplier"] = entities["supplier_id"]
     elif intent == "stockout":
         view, sql, params = (
             "risk_view",

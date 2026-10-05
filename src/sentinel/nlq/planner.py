@@ -134,6 +134,7 @@ class RulePlanner:
 class QwenPlanner:
     name = PLANNER_MODEL
     fallback_on_failure = True
+    shadow_mode = True
 
     def __init__(self, local_files_only=True, adapter=None):
         from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -177,6 +178,7 @@ class UnavailablePlanner:
 
     name = PLANNER_MODEL
     fallback_on_failure = True
+    shadow_mode = True
 
     def __init__(self, reason):
         self.reason = reason
