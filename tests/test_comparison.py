@@ -151,7 +151,9 @@ def test_fallback_cannot_inflate_model_only_score():
 
 
 def test_correct_novel_plan_cannot_bypass_runtime_grounding(tmp_path):
-    case = load_holdout()["cases"][0]
+    # Use a development-derived unsupported modifier, not a frozen holdout question.
+    row = next(r for r in seed_rows() if r["id"] == "curated_forecast_0")
+    case = {"question": row["question"] + " Excluding promotional days.", "expected": row["target"]}
     database = build_database(tmp_path / "test.duckdb")
     with patch("sentinel.nlq.service.execute") as execute:
         console = Console(

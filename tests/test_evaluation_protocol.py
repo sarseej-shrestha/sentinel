@@ -5,7 +5,6 @@ import pytest
 
 from scripts.evaluation_protocol import HELDOUT, load_holdout, reject_holdout_leakage
 from sentinel.nlq.planner import messages
-from sentinel.nlq.query_plan import request_plan
 
 
 def test_frozen_holdout_composition_and_canonical_labels():
@@ -28,7 +27,12 @@ def test_frozen_holdout_composition_and_canonical_labels():
 def test_holdout_labels_do_not_reward_grammar_abstention_on_valid_requests():
     case = load_holdout()["cases"][0]
     assert not case["expected"]["abstain"]
-    assert request_plan(case["question"])["abstain"]
+    # Labels remain independent; do not require a particular current grammar failure.
+    from scripts.compare_query_plans import score_record
+    from sentinel.nlq.query_plan import make_plan
+
+    record = {"candidate_query_plan": make_plan(), "query_plan": make_plan()}
+    assert not score_record(case, "deterministic", record)["primary_exact_match"]
 
 
 def test_holdout_was_not_in_pilot_or_existing_prompt():

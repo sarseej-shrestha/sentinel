@@ -213,10 +213,9 @@ def request_plan(question):
     if not isinstance(question, str) or not question.strip() or len(question) > 2000:
         return make_plan()
     q = re.sub(r"\s+", " ", question.strip().lower()).rstrip("?.!")
-    if re.search(
-        r"\b(delete|drop|truncate|insert|update|alter|attach|copy|install|load|buy|purchase|ship|send|create)\b",
-        q,
-    ):
+    from sentinel.nlq.semantics import is_unsafe, parse_semantics
+
+    if is_unsafe(q):
         return make_plan("unsafe")
     patterns = {
         "supplier_delay": [
@@ -278,8 +277,8 @@ def request_plan(question):
                 return validate_query_plan(result)
             except (ValueError, ValidationError):
                 # Unknown names, absent filters, and out-of-range values must clarify.
-                return make_plan()
-    return make_plan()
+                return parse_semantics(question)
+    return parse_semantics(question)
 
 
 def compile_query_plan(value):

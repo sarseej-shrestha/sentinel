@@ -4,7 +4,7 @@ Sentinel is a human-approved, read-only supply-chain operations console for CMPS
 
 ## Current Phase 2 status
 
-The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a constrained SQL-free planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and reproducible evaluation. The current suite passes 231 tests, including the original 204-test baseline and 27 new protocol/curation checks. Runtime behavior remains unchanged by the held-out evaluation work.
+The executable coding work is implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a constrained SQL-free planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and reproducible evaluation. The current suite passes 376 tests: the preceding 231 plus 145 semantic-coverage/diagnostic regressions. Development-only semantic parsing now complements the original phrase forms; the QueryPlan contract, fixed SQL compiler, AST validation, evidence and approval protections remain unchanged.
 
 Eleven core Kaggle datasets were downloaded and profiled locally. The backorder competition returned `UnauthenticatedError`; nine benchmark competitions are registered but unattempted. No Kaggle records enter the executable demo or training examples.
 
@@ -162,7 +162,7 @@ Runtime defaults to local-only loading. Invalid or unavailable Qwen output uses 
 
 ### Frozen pretraining comparison
 
-The 48-case `data/sample/query_plan_heldout_v1.json` was frozen in commit `b9a65b2` before the instruction expansion or new prompt implementation. Its SHA-256 is checked by the loader. It contains six requests for each of supplier late-delivery rates, stockout coverage, daily forecasting, supplier evidence and demand what-if (30 supported semantic targets), plus six missing-field, three ambiguous, three unsupported and six unsafe requests. Cases carry canonical plans, required fields, abstention labels and evidence requirements. Aliases, date boundaries and multi-filter forecasts are included. Targets are manually specified independently of the phrase-matching planner.
+The 48-case `data/sample/query_plan_heldout_v1.json` was frozen in commit `b9a65b2` before the instruction expansion or new prompt implementation. Its SHA-256 is checked by the loader. It contains six requests for each of supplier late-delivery rates, stockout coverage, daily forecasting, supplier evidence and demand what-if (30 supported semantic targets), plus six missing-field, three ambiguous, three unsupported and six unsafe requests. Cases carry canonical plans, required fields, abstention labels and evidence requirements. Aliases, date boundaries and multi-filter forecasts are included. Targets are manually specified independently of the planner. Individual cases were inspected in earlier sessions, so subsequent comparisons must not be described as perfectly untouched benchmarks.
 
 ```sh
 python -m scripts.build_sft_dataset --version curated-v2
@@ -174,7 +174,7 @@ Use a fresh output directory; existing evaluation databases are never overwritte
 
 Model-only semantic scores compare canonical proposals with independent labels **before** production phrase grounding. Product acceptance and selected fallback-plan scores are separate: unfamiliar but representable requests can receive correct model proposals and still abstain through the unchanged safety gate. Invalid JSON gets no correct-negative-plan credit merely for being rejected. Unsafe-request rejection measures the complete guard, not model compliance. Reports include per-category numerators/denominators, raw generations, prompts, retrieval, source hashes, memory and latency. Fallback latency includes the observed shared inference cost plus separately measured replay; it is not an independent model call. One greedy pass measures 48 unique requests per arm, not a statistical generalization guarantee. Do not tune against these revealed results; freeze another unseen set for future iteration.
 
-Actual frozen comparison: 96 real generations (48 per prompt), 48 rule requests and 48 paired fallback replays; no generation exception or fixture substitution. Model revisions were unchanged from the earlier spike. Initialization took 8,413.12 ms; peak process RSS was 5.13 GiB (not GPU-only memory). All 208 audit events verified.
+Historical comparison at `e759d7c`: 96 real generations (48 per prompt), 48 rule requests and 48 paired fallback replays; no generation exception or fixture substitution. Model revisions were unchanged from the earlier spike. Initialization took 8,413.12 ms; peak process RSS was 5.13 GiB (not GPU-only memory). All 208 audit events verified.
 
 | Arm | Valid plans | Exact semantic match | Supported exact match | Correct negative plan | Fallback | Mean latency ms |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -188,6 +188,22 @@ All four arms safely abstained on 18/18 negative requests and rejected 6/6 unsaf
 Latency min/median/p95/max in milliseconds: zero-shot 2,180.13 / 10,046.32 / 10,357.63 / 10,456.73; grounded 2,122.68 / 2,288.75 / 3,379.05 / 5,052.79; rules 14.52 / 43.69 / 1,174.29 / 1,238.24; paired fallback 2,123.03 / 2,291.07 / 3,915.02 / 5,013.82. These single-host timings include abstentions; early calls shared the host with regression checks. Prompt detail, examples and retrieval change together, so this is not an isolated BGE ablation. The zero-shot arm frequently echoed schema metadata or emitted incomplete fenced output; the grounded arm frequently abstained incorrectly or supplied wrong/missing fields. Do not promote this prompt or infer that fine-tuning will fix it.
 
 The expanded instruction set contains 141 examples (93 train, 24 validation, 24 test): the retained 41-example pilot plus 100 individually authored additions. By curation category: supplier delay 11, stockout 17, forecast 13, supplier evidence 13, what-if 16, shipment evidence 3, missing fields 10, ambiguous 8, unsupported 23, unsafe 15, and malformed-output recovery 12. Recovery examples treat previous output as untrusted and regenerate only from supplied facts; incomplete requests abstain. They do not enable automatic repair in production. Targets are canonical SQL-free JSON; curated labels are checked independently of the narrow runtime grammar. Exact normalized holdout questions are excluded from targets and few-shot context. Source seeds stay in the generator code; generated JSONL stays ignored in `data/training/query_plan_v2`.
+
+### Development diagnostics and semantic coverage
+
+```sh
+python -m scripts.evaluate_development --output artifacts/dev_snapshot.json
+# After a future development change, preserve those labels for comparison:
+python -m scripts.evaluate_development --baseline artifacts/dev_snapshot.json --output artifacts/dev_after.json
+```
+
+This command loads only existing instruction/development cases, not the frozen holdout. Optional `--model-report PATH` diagnoses a saved real-model development report after verifying every question belongs to the existing development inventory. Reports and intermediate snapshots remain ignored. The semantic parser was developed against the 141 instruction cases: exact match improved from 87/141 to 141/141, including supported requests from 32/82 to 82/82. This is development fit, not unseen accuracy. The final holdout rerun follows the development freeze.
+
+Additive diagnostics retain whole-plan exact match and report intent, canonical entities, date range, metrics, grouping, scenario, evidence, abstention and horizon matches. Scores include all cases and a separate applicable-field denominator to expose easy null-field matches. Missing fields never receive null-field credit. Safe fence removal, canonical aliases and order-independent metric lists use the existing contract conventions; duplicate fields/items and contract violations remain invalid. Partial field credit cannot authorize execution or count as whole-plan success.
+
+The overlapping error taxonomy covers wrong intent, entity normalization, missing filters, date range, metric, grouping, evidence, scenario parameters, incorrect abstention, unsupported acceptance and formatting, plus explicit contract violations. Unsupported acceptance describes a valid **proposal**, not a database action. On the prior 72-call real-model development report, exact match remained 24/72; observed errors included 36 entity mismatches, 27 wrong intents, 24 metric mismatches, 24 grouping mismatches and nine missing-evidence cases. No new training or model-quality improvement is implied by these diagnostics.
+
+The deterministic parser consumes canonical entity slots, number words, monthly/quarterly and bounded explicit dates, 14-day daily forecast horizons, inventory-coverage thresholds and explicit demand increases/multipliers. Unknown vocabulary, contradictory quantities, extra filters, negation and unsupported qualifiers abstain. Only existing allowlisted plans can be compiled. Tests cover every curated development case and adversarial modifications; two older tests now assert the invariant rather than requiring a particular held-out question to remain unrecognized. Qwen remains opt-in and experimental, with fallback enabled.
 
 No QLoRA training is authorized by these evaluation commands. If separately approved later, the existing recipe requires a compatible NVIDIA CUDA environment:
 

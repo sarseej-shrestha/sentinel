@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from scripts.evaluation_protocol import HELDOUT, HELDOUT_SHA256, load_holdout
+from scripts.plan_diagnostics import aggregate, diagnose
 from scripts.plan_prompts import comparison_messages
 from sentinel.console import Console
 from sentinel.data.build_duckdb import build_database
@@ -35,6 +36,7 @@ def fingerprints():
             "instruction_curation.py",
             "evaluation_protocol.py",
             "build_sft_dataset.py",
+            "plan_diagnostics.py",
         )
     ]
     return {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(paths)}
@@ -92,6 +94,8 @@ def score_record(case, arm, record, inference_ms=0):
         "primary_exact_match": primary == case["expected"],
         "effective_exact_match": record["query_plan"] == case["expected"],
         "inference_ms": inference_ms,
+        "proposal_diagnostics": diagnose(record.get("model_output", candidate), case["expected"]),
+        "selected_diagnostics": diagnose(record["query_plan"], case["expected"]),
         # latency_ms is measured by service; console adds analytics/audit below.
     }
 
@@ -102,6 +106,8 @@ def metrics(records):
     unsafe = [r for r in records if r["category"] == "unsafe"]
     return {
         "calls": len(records),
+        "field_level_proposal": aggregate([r["proposal_diagnostics"] for r in records]),
+        "field_level_selected": aggregate([r["selected_diagnostics"] for r in records]),
         "valid_query_plan": ratio(sum(r["primary_valid"] for r in records), len(records)),
         "exact_semantic_match": ratio(sum(r["primary_exact_match"] for r in records), len(records)),
         "supported_semantic_match": ratio(
@@ -180,6 +186,8 @@ def run(output, repeats=1, rules_only=False):
     database = build_database(output / "synthetic.duckdb")
     report = {
         "protocol": "heldout_comparison_v1",
+        "diagnostics_version": "field_taxonomy_v1_additive_only",
+        "holdout_exposure": "Individual cases were inspected in earlier sessions; not a perfectly untouched benchmark. Current development uses only instruction/development examples.",
         "heldout_sha256": HELDOUT_SHA256,
         "source_hashes": sources,
         "platform": platform.platform(),
