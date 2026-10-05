@@ -25,6 +25,13 @@ REASONS = [
     "missing_or_ambiguous_date",
     "future_history",
     "unsupported_granularity",
+    "unknown_or_ambiguous_entity",
+    "missing_entity",
+    "missing_scenario",
+    "missing_horizon",
+    "unsupported_metric",
+    "unsupported_modifier",
+    "ambiguous_intent",
 ]
 EXECUTION_SCHEMA = object_schema(
     {
@@ -59,7 +66,9 @@ def abstention_reason(question, intent):
             historical_window(normalize(question))
         except ValueError as exc:
             return "future_history" if "future" in str(exc) else "missing_or_ambiguous_date"
-    return "unsupported_or_incomplete"
+    from sentinel.nlq.intent_planners import interpret
+
+    return interpret(question).reason or "unsupported_or_incomplete"
 
 
 def metadata(plan, question=None):

@@ -51,6 +51,75 @@ EVIDENCE_FIELDS = {key for columns in SCHEMA.values() for key in columns} | {
     "late_delivery_rate",
 }
 
+# One source for canonical filters. Empty optional sets prohibit dropped qualifiers.
+REQUIRED_ENTITIES = {
+    "supplier_delay": set(),
+    "stockout": set(),
+    "forecast": {"product_id", "warehouse_id"},
+    "supplier_risk": {"supplier_id"},
+    "what_if": {"warehouse_id"},
+    "shipments": {"supplier_id"},
+    "missing_dates": set(),
+    "unsupported": set(),
+    "unsafe": set(),
+}
+OPTIONAL_ENTITIES = {"supplier_delay": {"supplier_id"}}
+INTENT_METRIC = {
+    "supplier_delay": "late_delivery_rate",
+    "stockout": "days_of_cover",
+    "forecast": "units",
+    "supplier_risk": "supplier_reliability",
+    "what_if": "scenario_days_of_cover",
+}
+
+
+def extract_entity_slots(text):
+    """Consume registry aliases, while retaining unknown names as explicit errors."""
+    aliases = sorted(
+        {
+            normalized(alias)
+            for entries in ENTITIES.values()
+            for names in entries.values()
+            for alias in names
+        },
+        key=lambda x: (-len(x), x),
+    )
+    unknown = r"(?:synthetic\s+)?product\s+(?:p?\d+|[a-z])|warehouse\s+(?:w?\d+|[a-z])|supplier\s+(?:s?\d+|[a-z])|[psw]\d+"
+    pattern = re.compile(
+        r"\b(?:" + "|".join(re.escape(a) for a in aliases) + "|" + unknown + r")\b"
+    )
+    entities = dict.fromkeys(ENTITIES)
+
+    def consume(match):
+        matches = []
+        for kind in ENTITIES:
+            try:
+                matches.append((kind, resolve_entity(kind, match[0])))
+            except ValueError:
+                pass
+        if len(matches) != 1:
+            raise ValueError("Unknown or ambiguous entity")
+        kind, identifier = matches[0]
+        if entities[kind] is not None and entities[kind] != identifier:
+            raise ValueError("Multiple entities require clarification")
+        entities[kind] = identifier
+        return " "
+
+    return entities, pattern.sub(consume, text).replace("'s", " ")
+
+
+def metric_candidates(text):
+    """Return all lexically grounded metrics; callers must resolve intent context."""
+    value = normalized(text)
+    return {
+        name
+        for name, spec in METRICS.items()
+        if any(
+            re.search(r"\b" + re.escape(normalized(alias)) + r"\b", value)
+            for alias in [name, *spec["aliases"]]
+        )
+    }
+
 
 def normalized(value):
     if not isinstance(value, str):

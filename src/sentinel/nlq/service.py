@@ -33,6 +33,8 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
         "effective_planner": getattr(planner, "name", "deterministic_rules"),
         "resolved_query_plan": None,
         "shadow_disagreement": None,
+        "shadow_failure": None,
+        "clarification_request": None,
     }
     selected = planner or RulePlanner()
     fallback_enabled = (
@@ -70,6 +72,7 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
                 abstained=True,
                 failure_behavior=f"Planner or retrieval unavailable: {type(exc).__name__}: {exc}",
                 shadow_disagreement=True if getattr(selected, "shadow_mode", False) else None,
+                shadow_failure="unavailable" if getattr(selected, "shadow_mode", False) else None,
             )
             query_plan = fallback()
         else:
@@ -84,6 +87,19 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
                     record["effective_planner"] = "deterministic_rules"
                     record["shadow_disagreement"] = False
             except Exception as exc:
+                from sentinel.nlq.query_plan import parse_output
+
+                kind = (
+                    "semantic_mismatch"
+                    if record["candidate_query_plan"] is not None
+                    else "invalid_contract"
+                )
+                try:
+                    raw = parse_output(record["model_output"])
+                    if isinstance(raw, dict) and {"type", "properties"} <= raw.keys():
+                        kind = "schema_echo"
+                except (ValueError, TypeError):
+                    kind = "malformed_output"
                 record.update(
                     json_validation="failed"
                     if record["candidate_query_plan"] is None
@@ -92,6 +108,7 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
                     abstained=True,
                     failure_behavior=f"Invalid QueryPlan: {type(exc).__name__}: {getattr(exc, 'message', str(exc))}",
                     shadow_disagreement=True if getattr(selected, "shadow_mode", False) else None,
+                    shadow_failure=kind if getattr(selected, "shadow_mode", False) else None,
                 )
                 query_plan = fallback()
         if query_plan is None:
@@ -102,11 +119,14 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
         plan = compile_query_plan(record["resolved_query_plan"])
         record["compiled_plan"] = plan
         if plan["abstain"] or plan["needs_clarification"]:
+            from sentinel.nlq.intent_planners import clarification
+
             record.update(
                 status="blocked" if plan["intent"] == "unsafe" else "clarification",
                 clarified=plan["needs_clarification"],
                 abstained=True,
                 failure_behavior="No SQL executed. Read-only supply-chain questions only; specify a supported metric and entity.",
+                clarification_request=clarification(question),
             )
             return record
         record.update(abstained=False, clarified=False)

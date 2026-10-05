@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 
 from sentinel.config import AS_OF
-from sentinel.nlq.registry import ENTITIES, resolve_entity
+from sentinel.nlq.registry import ENTITIES, OPTIONAL_ENTITIES, REQUIRED_ENTITIES, resolve_entity
 
 # Metric/dimension/evidence names describe semantics, never interpolated SQL identifiers.
 SPECS = {
@@ -154,16 +154,11 @@ def validate_query_plan(value, question=None):
         if set(result[field]) != set(allowed):
             raise ValueError(f"{intent} requires exactly these {field}: {allowed}")
         result[field] = sorted(result[field])
-    required_entities = {
-        "supplier_risk": {"supplier_id"},
-        "shipments": {"supplier_id"},
-        "forecast": {"product_id", "warehouse_id"},
-        "what_if": {"warehouse_id"},
-    }.get(intent, set())
+    required_entities = REQUIRED_ENTITIES[intent]
     present = {key for key, value in result["entities"].items() if value is not None}
-    if intent == "supplier_delay" and present <= {"supplier_id"}:
-        required_entities = present
-    if present != required_entities:
+    if not required_entities <= present or present - required_entities - OPTIONAL_ENTITIES.get(
+        intent, set()
+    ):
         raise ValueError(
             f"{intent} requires exactly these entity filters: {sorted(required_entities)}"
         )
