@@ -14,6 +14,23 @@ Qwen and BGE were genuinely evaluated on this host's Apple M4 Max GPU. Qwen prop
 
 ## Semantic-repair branch
 
+### Robust-semantic-repair development
+
+`robust-semantic-repair` branches from `d7907bc`, preserving both earlier branches. It separates candidate intent discovery, registry-backed slots, five dedicated planners, and typed execution validation. Missing entities, dates and scenario quantities now produce audited clarification details. Qwen remains shadow-only; schema echoes, malformed outputs and semantic disagreements are recorded separately. SQL compilation, AST checks, evidence and review authority are unchanged.
+
+The versioned internal instruction generator retains 141 prior core labels and adds 36 reviewed development examples. It emits 177 SQL-free V2 targets in family-grouped train/validation/development splits (131/32/14). Alias/number-normalized lexical near-duplicates cannot cross these splits, and messages contain no shared few-shot questions. This guard is not proof against all semantic overlap. None of these splits is an independent benchmark. The new V2 files are preparation data, intentionally **not accepted by the existing V1 QLoRA trainer**; training and runtime-adapter promotion require a separately reviewed contract migration and external evaluation.
+
+```sh
+python -m scripts.robust_instruction_data --output data/training/robust_v1
+python -m scripts.blinded_benchmark predict --questions /path/to/questions.json --sha256 QUESTIONS_SHA256 --output artifacts/blind_run
+# Keep the printed prediction digest separately; only then obtain the labels.
+python -m scripts.blinded_benchmark score --predictions artifacts/blind_run/predictions.json --predictions-sha256 PREDICTIONS_SHA256 --labels /path/to/labels.json --labels-sha256 LABELS_SHA256
+```
+
+Use fresh output directories. The question manifest has `protocol: "sentinel_blind_questions_v1"`, a `benchmark_id`, `reference_date: "2026-09-30"`, `provenance` (`internal` or `externally_authored_claimed`), and `cases` containing only `id` and `question`. Labels use `protocol: "sentinel_blind_labels_v1"`, the same `benchmark_id`, `questions_sha256`, and cases containing `id`, `category`, and a complete canonical V2 `expected` plan. The isolated prediction worker receives questions only. Scoring preserves legacy field/exact-match diagnostics and reports V2 exact match and metadata fields separately. Hashes detect changes relative to pinned digests; they do not authenticate authorship. No external benchmark has been supplied, so independent promotion remains blocked.
+
+The following measurements describe the earlier `semantic-repair` milestone, not a new independent evaluation:
+
 `semantic-repair` starts from the preserved 376-test tip `89f4064`, which includes `e759d7c`; it does not change `phase2-coding`. V1 SQL-free proposals and original evaluation labels remain compatible. Before compilation, the application creates and validates a V2 execution contract containing explicit granularity, date basis, supplier scope and abstention reason. Qwen is shadow-only: even an agreeing proposal leaves execution ownership with the deterministic planner, and disagreements remain in the audit record.
 
 Calendar normalization uses the fixed demo date, not the host clock. Internal intervals are always `[start, end)`. Natural-language explicit ranges include their final day unless marked exclusive; “past N days” means N completed days before the reference date. Last/this/next month, previous quarter and explicit dates normalize deterministically. Future historical queries abstain. Daily/weekly history granularity is retained by the date resolver, but those breakdowns currently abstain in the supplier aggregate template; daily 14-day demand forecasting is unchanged. Supplier lateness can filter one canonical supplier or explicitly represent all suppliers, using promised dates and evaluable observations, never invented risk probabilities.
