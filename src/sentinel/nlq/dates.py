@@ -16,6 +16,14 @@ MONTHS = {name.lower(): i for i, name in enumerate(calendar.month_name) if name}
 MONTH = "(?:" + "|".join(MONTHS) + ")"
 
 
+def normalize_date_words(text):
+    """Only bounded quantity words, not locale-dependent numeric dates."""
+    words = "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty".split()
+    values = {word: index for index, word in enumerate(words)}
+    values.update({"thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "ninety": 90})
+    return re.sub(r"\b(" + "|".join(values) + r")\b", lambda m: str(values[m[0]]), text.casefold())
+
+
 @dataclass(frozen=True)
 class DateWindow:
     start: str
@@ -32,18 +40,23 @@ def month_end(year, month):
 
 def extract_date_range(text, reference=AS_OF):
     today = date.fromisoformat(reference)
-    q = text.casefold()
+    q = normalize_date_words(text)
     patterns = [
         (rf"calendar month before ({MONTH}) (\d{{4}})", "before"),
-        (r"\b(last|previous|this|next) (?:calendar )?month\b", "relative"),
-        (r"\b(?:last|previous) quarter\b", "previous_quarter"),
-        (r"\bpast (\d+) days\b", "rolling"),
+        (r"\b(last|previous|this|current|next) (?:calendar )?month\b", "relative"),
+        (r"\b(?:last|previous) (?:calendar )?quarter\b", "previous_quarter"),
+        (r"\b(?:past|last) (\d+) (?:completed )?days\b", "rolling"),
         (rf"first (\d+) days of ({MONTH}) (\d{{4}})", "prefix"),
         (r"(first|second|third|fourth) quarter of (\d{4})", "quarter"),
         (
             r"(\d{4}-\d{2}-\d{2})\s+(?:through|to)\s+(\d{4}-\d{2}-\d{2})(?:\s+(inclusive|exclusive))?",
             "iso",
         ),
+        (
+            r"between (\d{4}-\d{2}-\d{2}) and (\d{4}-\d{2}-\d{2})(?:\s+(inclusive|exclusive))?",
+            "iso",
+        ),
+        (rf"({MONTH}) (\d+) (?:through|to|and) ({MONTH}) (\d+),? (\d{{4}})", "named_days"),
         (
             rf"({MONTH}) (\d+) and ({MONTH}) (\d+) inclusive\??[.;]? use (\d{{4}}) dates",
             "named_days",
