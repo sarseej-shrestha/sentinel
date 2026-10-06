@@ -1,151 +1,93 @@
-"""One inspectable request record, including blocked and unavailable paths."""
+"""Deterministic-only request execution. Model diagnostics never enter this path."""
 
 import time
 from dataclasses import asdict
 
+from sentinel.nlq.authority import execution_abstention, resolve
 from sentinel.nlq.execution_contract import resolve_execution_plan
 from sentinel.nlq.executor import execute
-from sentinel.nlq.planner import RulePlanner
-from sentinel.nlq.query_plan import compile_query_plan, request_plan, validate_query_plan
+from sentinel.nlq.planner import plan as abstention_plan
+from sentinel.nlq.query_plan import QUERY_PLAN_SCHEMA, compile_query_plan
 from sentinel.nlq.retrieval import SchemaRetriever
 from sentinel.nlq.sql_guard import SQLBlocked, guard_sql
 
 
 def ask(database, question, planner=None, retriever=None, query_timeout=3.0, allow_fallback=None):
+    """Legacy planner/retriever/fallback arguments are ignored, never called.
+
+    Use the explicit deferred shadow interface for optional model/retrieval work.
+    """
     start = time.perf_counter()
     record = {
         "input": question,
         "retrieved_schema": None,
         "model_output": None,
-        "planner_backend": getattr(planner, "name", "deterministic_rules"),
+        "planner_backend": "deterministic_rules",
         "json_validation": "not_run",
         "sql_validation": "not_run",
         "query_result": None,
         "status": "abstained",
         "clarified": False,
-        "abstained": False,
+        "abstained": True,
         "failure_behavior": None,
         "candidate_query_plan": None,
         "query_plan": None,
         "compiled_plan": None,
         "plan_validation": "not_run",
         "fallback_used": False,
-        "effective_planner": getattr(planner, "name", "deterministic_rules"),
+        "effective_planner": "deterministic_rules",
         "resolved_query_plan": None,
         "shadow_disagreement": None,
         "shadow_failure": None,
         "clarification_request": None,
+        "resolution": None,
     }
-    selected = planner or RulePlanner()
-    fallback_enabled = (
-        getattr(selected, "fallback_on_failure", False)
-        if allow_fallback is None
-        else allow_fallback
-    )
-
-    def fallback():
-        if not fallback_enabled:
-            return None
-        record.update(fallback_used=True, effective_planner="deterministic_rules")
-        return validate_query_plan(request_plan(question), question)
-
     try:
-        if not isinstance(question, str) or not question.strip() or len(question) > 2000:
+        resolution = resolve(question)
+        record["resolution"] = resolution
+        full = resolution["plan"]
+        core = {key: full[key] for key in QUERY_PLAN_SCHEMA["properties"]}
+        record.update(
+            query_plan=core,
+            candidate_query_plan=core,
+            resolved_query_plan=full,
+            json_validation="passed",
+            plan_validation="passed",
+        )
+        if isinstance(question, str) and question.strip() and len(question) <= 2000:
+            record["retrieved_schema"] = SchemaRetriever().retrieve(question)
+        if resolution["state"] != "supported":
+            needs = resolution["state"] == "clarification_required"
             record.update(
-                status="clarification",
-                clarified=True,
-                abstained=True,
-                failure_behavior="Enter a supported supply-chain question, at most 2,000 characters.",
-                resolved_query_plan=resolve_execution_plan(question=question),
+                status="blocked" if resolution["state"] == "unsafe" else "clarification",
+                clarified=needs,
+                failure_behavior=resolution["message"],
+                compiled_plan=abstention_plan(
+                    core["intent"], abstain=True, needs_clarification=needs
+                ),
+                clarification_request={
+                    "reason": resolution["reason_code"],
+                    "required_fields": resolution["fields"],
+                    "allowed_choices": resolution["allowed_choices"],
+                    "question": resolution["message"],
+                }
+                if needs
+                else None,
             )
             return record
-        try:
-            record["retrieved_schema"] = (retriever or SchemaRetriever()).retrieve(question)
-            record["model_output"] = (
-                selected.query_plan(question)
-                if type(selected) is RulePlanner
-                else selected.generate(question, record["retrieved_schema"])
-            )
-        except Exception as exc:
-            record.update(
-                status="unavailable",
-                abstained=True,
-                failure_behavior=f"Planner or retrieval unavailable: {type(exc).__name__}: {exc}",
-                shadow_disagreement=True if getattr(selected, "shadow_mode", False) else None,
-                shadow_failure="unavailable" if getattr(selected, "shadow_mode", False) else None,
-            )
-            query_plan = fallback()
-        else:
-            try:
-                candidate = validate_query_plan(record["model_output"])
-                record.update(json_validation="passed", candidate_query_plan=candidate)
-                query_plan = validate_query_plan(candidate, question)
-                record["plan_validation"] = "passed"
-                if getattr(selected, "shadow_mode", False):
-                    # Even agreement does not promote Qwen to the execution owner.
-                    query_plan = validate_query_plan(request_plan(question), question)
-                    record["effective_planner"] = "deterministic_rules"
-                    record["shadow_disagreement"] = False
-            except Exception as exc:
-                from sentinel.nlq.query_plan import parse_output
-
-                kind = (
-                    "semantic_mismatch"
-                    if record["candidate_query_plan"] is not None
-                    else "invalid_contract"
-                )
-                try:
-                    raw = parse_output(record["model_output"])
-                    if isinstance(raw, dict) and {"type", "properties"} <= raw.keys():
-                        kind = "schema_echo"
-                except (ValueError, TypeError):
-                    kind = "malformed_output"
-                record.update(
-                    json_validation="failed"
-                    if record["candidate_query_plan"] is None
-                    else "passed",
-                    plan_validation="failed",
-                    abstained=True,
-                    failure_behavior=f"Invalid QueryPlan: {type(exc).__name__}: {getattr(exc, 'message', str(exc))}",
-                    shadow_disagreement=True if getattr(selected, "shadow_mode", False) else None,
-                    shadow_failure=kind if getattr(selected, "shadow_mode", False) else None,
-                )
-                query_plan = fallback()
-        if query_plan is None:
-            record["resolved_query_plan"] = resolve_execution_plan()
-            return record
-        record["query_plan"] = query_plan
-        record["resolved_query_plan"] = resolve_execution_plan(query_plan, question)
-        plan = compile_query_plan(record["resolved_query_plan"])
-        record["compiled_plan"] = plan
-        if plan["abstain"] or plan["needs_clarification"]:
-            from sentinel.nlq.intent_planners import clarification
-
-            record.update(
-                status="blocked" if plan["intent"] == "unsafe" else "clarification",
-                clarified=plan["needs_clarification"],
-                abstained=True,
-                failure_behavior="No SQL executed. Read-only supply-chain questions only; specify a supported metric and entity.",
-                clarification_request=clarification(question),
-            )
-            return record
-        record.update(abstained=False, clarified=False)
-        try:
-            guard_sql(plan["sql"], plan["parameters"])
-            record["sql_validation"] = "passed"
-        except SQLBlocked as exc:
-            record.update(
-                sql_validation="blocked",
-                status="blocked",
-                abstained=True,
-                failure_behavior=str(exc),
-            )
-            return record
-        result = execute(database, plan["sql"], plan["parameters"], timeout=query_timeout)
-        record["query_result"] = asdict(result)
-        record["status"] = result.status
+        compiled = compile_query_plan(full)
+        record["compiled_plan"] = compiled
+        guard_sql(compiled["sql"], compiled["parameters"])
+        record["sql_validation"] = "passed"
+        result = execute(database, compiled["sql"], compiled["parameters"], timeout=query_timeout)
+        record.update(
+            query_result=asdict(result), status=result.status, abstained=result.status != "ok"
+        )
         if result.status != "ok":
-            record.update(abstained=True, failure_behavior=result.explanation)
+            record["failure_behavior"] = result.explanation
+            execution_abstention(
+                record, "empty_result" if result.status == "empty" else "execution_" + result.status
+            )
         elif any(
             row.get("data_quality_flag", "ok") != "ok" or row.get("missing_field_count", 0) > 0
             for row in result.rows
@@ -153,13 +95,33 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
             record.update(
                 status="missing_information",
                 abstained=True,
-                failure_behavior="Incomplete or invalid evidence is shown; resolve data quality before a recommendation.",
+                failure_behavior="Incomplete or invalid evidence; resolve data quality before a recommendation.",
             )
+            execution_abstention(record, "invalid_evidence")
     except Exception as exc:
+        blocked = isinstance(exc, SQLBlocked)
         record.update(
-            status="unavailable",
+            status="blocked" if blocked else "unavailable",
             abstained=True,
-            failure_behavior=f"Planner or retrieval unavailable: {type(exc).__name__}",
+            sql_validation="blocked" if blocked else record["sql_validation"],
+            failure_behavior="SQL rejected by safety validation."
+            if blocked
+            else "Deterministic analysis unavailable. No recommendation was created.",
+        )
+        if record["resolution"] is None:
+            record["resolution"] = {
+                "state": "unavailable",
+                "plan": resolve_execution_plan(),
+                "reason_code": "resolution_unavailable",
+                "fields": ["request"],
+                "allowed_choices": {},
+                "message": record["failure_behavior"],
+            }
+            record["resolved_query_plan"] = record["resolution"]["plan"]
+        execution_abstention(
+            record,
+            "sql_safety_rejection" if blocked else "analysis_unavailable",
+            "sql" if blocked else "request",
         )
     finally:
         record["latency_ms"] = (time.perf_counter() - start) * 1000

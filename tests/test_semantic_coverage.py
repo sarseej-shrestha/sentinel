@@ -171,7 +171,9 @@ def test_schema_valid_model_plan_with_wrong_development_filter_cannot_execute(tm
     console = Console(
         build_database(tmp_path / "blocked.duckdb"), RecordedOutput(json.dumps(wrong), "base")
     )
-    with patch("sentinel.nlq.service.execute") as execute:
+    with patch("sentinel.nlq.service.execute", side_effect=RuntimeError("probe")) as execute:
         result = console.question(case["question"])
-    execute.assert_not_called()
-    assert result["abstained"] and result["plan_validation"] == "failed"
+    execute.assert_called_once()
+    assert execute.call_args.args[2] == {"product": "P4", "warehouse": "W2"}
+    assert result["query_plan"] == case["target"]
+    assert result["model_output"] is None

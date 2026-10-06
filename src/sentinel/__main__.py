@@ -18,9 +18,13 @@ def main():
         action="store_true",
         help="Record the first recommendation as a pending simulated action",
     )
-    question.add_argument("--backend", choices=["rules", "qwen"], default="rules")
-    question.add_argument("--retrieval", choices=["lexical", "bge"], default="lexical")
-    question.add_argument("--adapter", help="Local PEFT adapter directory, for the Qwen backend")
+    question.add_argument(
+        "--shadow", action="store_true", help="Queue optional diagnostics without loading a model"
+    )
+    shadow = commands.add_parser("shadow", help="Complete one queued diagnostic after its answer")
+    shadow.add_argument("request_id")
+    shadow.add_argument("--retrieval", choices=["lexical", "bge"], default="bge")
+    shadow.add_argument("--timeout", type=float, default=60)
     decision = commands.add_parser("decide")
     decision.add_argument("action_id")
     decision.add_argument("decision", choices=["approve", "reject", "edit"])
@@ -30,22 +34,15 @@ def main():
     args = parser.parse_args()
     console = Console(args.database)
     if args.command == "ask":
-        from sentinel.nlq.planner import QwenPlanner, UnavailablePlanner
-        from sentinel.nlq.retrieval import SchemaRetriever
-
-        try:
-            if args.backend == "qwen":
-                console.planner = QwenPlanner(adapter=args.adapter)
-            console.retriever = SchemaRetriever(args.retrieval)
-        except (ImportError, OSError) as exc:
-            console.planner = UnavailablePlanner(
-                f"Requested model or retrieval unavailable: {type(exc).__name__}. "
-                "Using the bounded deterministic planner and lexical retrieval."
-            )
-            console.retriever = SchemaRetriever("lexical")
-        result = console.question(args.question)
+        result = console.question(args.question, shadow=args.shadow)
         if args.propose and result.get("recommendations"):
             result["pending_action"] = console.gate.propose(result["recommendations"][0])
+    elif args.command == "shadow":
+        from sentinel.nlq.shadow import complete_shadow
+
+        result = complete_shadow(
+            console.audit, args.request_id, retrieval=args.retrieval, timeout=args.timeout
+        )
     elif args.command == "decide":
         result = console.gate.decide(args.action_id, args.decision, args.reviewer, args.text)
     else:

@@ -208,12 +208,19 @@ def test_shadow_model_cannot_take_execution_ownership(tmp_path, raw, disagrees):
             return raw if raw is not None else request_plan(question)
 
     console = Console(build_database(tmp_path / "shadow.duckdb"), Shadow())
-    result = console.question(question)
+    result = console.question(question, shadow=True)
     assert result["status"] == "ok"
     assert result["effective_planner"] == "deterministic_rules"
-    assert result["shadow_disagreement"] == disagrees
-    assert result["fallback_used"] == disagrees
-    assert console.audit.replay()[-1]["payload"]["shadow_disagreement"] == disagrees
+    from sentinel.nlq.shadow import complete_shadow
+
+    diagnostic = complete_shadow(
+        console.audit,
+        result["shadow_request_id"],
+        provider=lambda q: {"raw": Shadow().generate(q, {})},
+    )
+    assert diagnostic["disagrees"] == disagrees
+    assert not result["fallback_used"]
+    assert console.audit.replay()[-1]["payload"]["disagrees"] == disagrees
 
 
 def test_stockout_business_alias_uses_same_allowlisted_metric():
@@ -233,11 +240,18 @@ def test_shadow_wrong_supplier_cannot_override_deterministic_filter(tmp_path):
             return request_plan("Why is Supplier A considered high risk?")
 
     console = Console(build_database(tmp_path / "disagreement.duckdb"), Shadow())
-    result = console.question(question)
-    assert result["candidate_query_plan"]["entities"]["supplier_id"] == "S1"
+    result = console.question(question, shadow=True)
+    from sentinel.nlq.shadow import complete_shadow
+
+    diagnostic = complete_shadow(
+        console.audit,
+        result["shadow_request_id"],
+        provider=lambda q: {"raw": Shadow().generate(q, {})},
+    )
+    assert diagnostic["proposal"]["entities"]["supplier_id"] == "S1"
     assert result["query_plan"]["entities"]["supplier_id"] == "S2"
     assert result["compiled_plan"]["parameters"] == {"supplier": "S2"}
-    assert result["shadow_disagreement"] is True
+    assert diagnostic["disagrees"] is True
     assert all(row["supplier_id"] == "S2" for row in result["query_result"]["rows"])
 
 

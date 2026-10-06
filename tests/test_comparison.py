@@ -163,8 +163,10 @@ def test_correct_novel_plan_cannot_bypass_runtime_grounding(tmp_path):
         )
         record = console.question(case["question"])
     execute.assert_not_called()
-    assert record["candidate_query_plan"] == case["expected"]
-    assert record["plan_validation"] == "failed" and record["abstained"]
+    from sentinel.nlq.shadow import classify
+
+    assert classify(case["expected"], record["query_plan"])["disagrees"]
+    assert record["candidate_query_plan"]["abstain"] and record["abstained"]
     assert console.audit.replay()[-1]["payload"] == record
 
 
@@ -174,6 +176,6 @@ def test_generation_error_is_audited_without_substitute_model_output(tmp_path):
         database, RecordedOutput(None, "base", "explicit timeout injection"), RecordedRetrieval({})
     )
     record = console.question("Explain the risk for S1.")
-    assert record["model_output"] is None and record["status"] == "unavailable"
-    assert record["abstained"] and not record["fallback_used"]
+    assert record["model_output"] is None and record["status"] == "ok"
+    assert not record["abstained"] and not record["fallback_used"]
     assert console.audit.replay()[-1]["payload"] == record

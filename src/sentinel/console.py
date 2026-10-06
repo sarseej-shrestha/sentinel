@@ -15,10 +15,10 @@ class Console:
         self.gate = ActionGate(self.audit)
         self.risks = None
 
-    def question(self, text):
+    def question(self, text, *, shadow=False):
         record = ask(self.database, text, self.planner, self.retriever)
         # Record blocked questions and failures as well as successful queries.
-        self.audit.append("query", record)
+        query_event = self.audit.append("query", record)
         if record["status"] == "ok":
             try:
                 self._analyze(record)
@@ -32,7 +32,17 @@ class Console:
                     abstained=True,
                     failure_behavior=f"Invalid or incomplete analysis inputs ({type(exc).__name__}): {exc}. No recommendation was created.",
                 )
+                from sentinel.nlq.authority import execution_abstention
+
+                execution_abstention(record, "invalid_analysis_evidence")
             self.audit.append("analysis", record)
+        if shadow and record["query_plan"] is not None:
+            # No provider is called here. A separate explicit command performs
+            # optional diagnostics after the authoritative response is delivered.
+            pending = self.audit.append(
+                "shadow_requested", {"query_event_id": query_event["event_id"]}
+            )
+            record = {**record, "shadow_request_id": pending["event_id"]}
         return record
 
     def _analyze(self, record):

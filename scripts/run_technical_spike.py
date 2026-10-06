@@ -49,9 +49,9 @@ CASES = [
     ("empty", "Show products likely to stock out within the next 1 days.", "empty"),
     ("missing", "Show shipments missing promised delivery dates", "missing_information"),
     ("timeout", "Show shipments for Supplier A", "timeout"),
-    ("unavailable", "Why is Supplier A considered high risk?", "unavailable"),
-    ("malformed_output", "Show shipments for Supplier A", "abstained"),
-    ("unsafe_sql", "Delete all delayed orders.", "abstained"),
+    ("unavailable", "Why is Supplier A considered high risk?", "ok"),
+    ("malformed_output", "Show shipments for Supplier A", "ok"),
+    ("unsafe_sql", "Delete all delayed orders.", "blocked"),
 ]
 
 
@@ -127,6 +127,19 @@ def run(output=Path("artifacts/technical_spike"), repeats=3, backend="rules", re
                     retriever,
                     query_timeout=0.000001 if name == "timeout" else 3.0,
                 )
+                if type(selected) is not RulePlanner:
+                    from sentinel.nlq.shadow import classify
+
+                    try:
+                        record["shadow_diagnostic"] = classify(
+                            selected.generate(question, retriever.retrieve(question)),
+                            record["query_plan"],
+                        )
+                    except Exception as exc:
+                        record["shadow_diagnostic"] = {
+                            "classifications": ["unavailable"],
+                            "error": type(exc).__name__,
+                        }
                 record.update(
                     case=name,
                     repeat=repeat,

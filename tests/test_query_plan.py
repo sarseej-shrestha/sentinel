@@ -181,20 +181,26 @@ def test_unrecognized_qualifiers_do_not_silently_disappear(question):
 @pytest.mark.parametrize(
     "raw", ['{"sql":"DELETE FROM orders"}', "not JSON", json.dumps(GOLD[9]["expected"])]
 )
-def test_invalid_model_plan_never_reaches_executor_without_fallback(tmp_path, raw):
-    with patch("sentinel.nlq.service.execute") as execute:
+def test_invalid_model_plan_cannot_suppress_authoritative_execution(tmp_path, raw):
+    from sentinel.nlq.query_plan import compile_query_plan
+
+    with patch("sentinel.nlq.service.execute", side_effect=RuntimeError("probe")) as execute:
         result = ask(
             tmp_path / "absent.duckdb", GOLD[6]["question"], ModelFixture(raw), allow_fallback=False
         )
-    execute.assert_not_called()
-    assert result["abstained"] and result["query_plan"] is None
+    compiled = compile_query_plan(GOLD[6]["expected"])
+    execute.assert_called_once_with(
+        tmp_path / "absent.duckdb", compiled["sql"], compiled["parameters"], timeout=3.0
+    )
+    assert result["query_plan"] == GOLD[6]["expected"]
+    assert result["model_output"] is None
 
 
-def test_fallback_keeps_raw_failure_and_audits_compiled_evidence(tmp_path):
+def test_authority_ignores_model_failure_and_audits_compiled_evidence(tmp_path):
     console = Console(build_database(tmp_path / "fallback.duckdb"), ModelFixture("not JSON"))
     result = console.question(GOLD[9]["question"])
-    assert result["status"] == "ok" and result["fallback_used"]
-    assert result["model_output"] == "not JSON" and result["json_validation"] == "failed"
+    assert result["status"] == "ok" and not result["fallback_used"]
+    assert result["model_output"] is None and result["json_validation"] == "passed"
     assert result["effective_planner"] == "deterministic_rules"
     assert result["query_plan"] == GOLD[9]["expected"]
     assert result["query_result"]["rows"][0]["supplier_id"] == "S1"
@@ -213,18 +219,18 @@ def test_fallback_cannot_rescue_unsupported_or_unsafe_requests(tmp_path, questio
         )
         result = console.question(question)
     execute.assert_not_called()
-    assert result["fallback_used"] and result["abstained"]
+    assert not result["fallback_used"] and result["abstained"]
     assert console.audit.replay()[-1]["payload"] == result
 
 
-def test_model_unavailable_uses_explicit_fallback(tmp_path):
+def test_model_unavailable_has_no_effect_on_authority(tmp_path):
     result = ask(
         build_database(tmp_path / "unavailable.duckdb"),
         GOLD[9]["question"],
         UnavailablePlanner("test timeout"),
     )
-    assert result["status"] == "ok" and result["fallback_used"]
-    assert result["model_output"] is None and "test timeout" in result["failure_behavior"]
+    assert result["status"] == "ok" and not result["fallback_used"]
+    assert result["model_output"] is None and result["failure_behavior"] is None
 
 
 def test_prompt_examples_are_grounded_and_sql_free():
@@ -260,7 +266,10 @@ def test_accepted_fenced_plan_runs_only_compiled_sql(tmp_path):
     console = Console(build_database(tmp_path / "fenced.duckdb"), ModelFixture(raw))
     result = console.question(case["question"])
     assert result["status"] == "ok" and not result["fallback_used"]
-    assert result["model_output"] == raw and "sql" not in result["query_plan"]
+    from sentinel.nlq.shadow import classify
+
+    assert classify(raw, result["query_plan"])["proposal_valid"]
+    assert result["model_output"] is None and "sql" not in result["query_plan"]
     assert result["sql_validation"] == "passed" and len(result["what_if"]) == 6
     assert console.audit.replay()[-1]["payload"] == result
 

@@ -130,7 +130,7 @@ def run(output, backend="qwen", retrieval="bge", repeats=3):
         "initialization_ms": (time.perf_counter() - started) * 1000,
         "contract": "sql_free_query_plan_v1",
         "repeats": repeats,
-        "measurement_scope": "Generation, retrieval, validation, compiler, SQL execution, analytics and audit; fallback is labeled and excluded from model semantic success. Repeated cases are not independent generalization samples.",
+        "measurement_scope": "Offline deterministic response followed by proposal generation/scoring; combined time is NOT user-facing request latency. Model-only scores use the separately generated proposal, never the deterministic response. Fallback selection is disabled. Repeats are not independent samples.",
         "records": [],
         "source_hashes": sources,
     }
@@ -154,6 +154,18 @@ def run(output, backend="qwen", retrieval="bge", repeats=3):
                 )
             started = time.perf_counter()
             record = console.question(case["question"])
+            # Measure a proposal offline; never replace the authoritative plan.
+            from sentinel.nlq.shadow import classify
+
+            raw = planner.generate(case["question"], retriever.retrieve(case["question"]))
+            diagnostic = classify(raw, record["query_plan"])
+            record.update(
+                model_output=raw,
+                candidate_query_plan=diagnostic["proposal"],
+                plan_validation="passed"
+                if diagnostic["proposal_valid"] and not diagnostic["disagrees"]
+                else "failed",
+            )
             if source_hashes() != sources:
                 raise RuntimeError(
                     "Source changed during evaluation; keep partial results separate and rerun"

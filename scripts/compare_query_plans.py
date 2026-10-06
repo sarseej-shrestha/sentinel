@@ -94,7 +94,10 @@ def score_record(case, arm, record, inference_ms=0):
         "primary_exact_match": primary == case["expected"],
         "effective_exact_match": record["query_plan"] == case["expected"],
         "inference_ms": inference_ms,
-        "proposal_diagnostics": diagnose(record.get("model_output", candidate), case["expected"]),
+        "proposal_diagnostics": diagnose(
+            candidate if arm == "deterministic" else record.get("model_output", candidate),
+            case["expected"],
+        ),
         "selected_diagnostics": diagnose(record["query_plan"], case["expected"]),
         # latency_ms is measured by service; console adds analytics/audit below.
     }
@@ -185,7 +188,7 @@ def run(output, repeats=1, rules_only=False):
     output.mkdir(parents=True, exist_ok=True)
     database = build_database(output / "synthetic.duckdb")
     report = {
-        "protocol": "heldout_comparison_v1",
+        "protocol": "authority_comparison_v2",
         "diagnostics_version": "field_taxonomy_v1_additive_only",
         "holdout_exposure": "Individual cases were inspected in earlier sessions; not a perfectly untouched benchmark. Current development uses only instruction/development examples.",
         "heldout_sha256": HELDOUT_SHA256,
@@ -198,9 +201,9 @@ def run(output, repeats=1, rules_only=False):
             "base": "Unmodified Qwen Instruct weights; zero-shot contract/catalog, no retrieval.",
             "grounded": "Same weights; predeclared detailed prompt, four training-only examples, BGE.",
             "deterministic": "Unchanged bounded rules and lexical retrieval.",
-            "fallback": "Paired replay of grounded raw output through the unchanged enabled fallback.",
+            "fallback": "Legacy arm name: deterministic authority with the same grounded proposal scored only as a diagnostic. No fallback selection occurs.",
         },
-        "latency_scope": "Base/grounded: observed retrieval+generation+product pipeline. Fallback: same observed inference cost plus separately measured paired replay, not an independent generation. Model loading excluded. All arms include validation/SQL when accepted/analytics/audit.",
+        "latency_scope": "Offline combined diagnostic cost, NOT user-facing runtime latency: retrieval/generation plus deterministic product pipeline. The legacy fallback arm reuses grounded inference cost. Model loading excluded; pipeline_ms measures only the deterministic response.",
         "scoring": "Base/grounded/rules primary scores use canonical proposals before runtime phrase grounding. Fallback primary scores use the selected product plan. Invalid outputs receive no negative-plan credit. Semantic gold never grants execution authority.",
         "records": [],
     }
@@ -227,6 +230,20 @@ def run(output, repeats=1, rules_only=False):
         start = time.perf_counter()
         record = Console(database, planner, retriever).question(case["question"])
         elapsed = (time.perf_counter() - start) * 1000
+        if arm != "deterministic":
+            # Offline proposal scoring is separate from authoritative execution.
+            from sentinel.nlq.shadow import classify
+
+            try:
+                raw = planner.generate(case["question"], {})
+                diagnostic = classify(raw, record["query_plan"])
+            except Exception:
+                raw, diagnostic = None, {"proposal": None}
+            record.update(
+                model_output=raw,
+                candidate_query_plan=diagnostic.get("proposal"),
+                retrieved_schema=retriever.retrieve(case["question"]),
+            )
         scored = score_record(case, arm, record, cost)
         scored.update(request_latency_ms=cost + elapsed, pipeline_ms=elapsed, **(details or {}))
         report["records"].append(scored)

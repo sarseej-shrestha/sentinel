@@ -88,8 +88,8 @@ def test_clarification_is_audited_without_execution(tmp_path):
     "raw,kind",
     [
         ('{"type":"object","properties":{}}', "schema_echo"),
-        ("not JSON", "malformed_output"),
-        ('{"sql":"DELETE FROM orders"}', "invalid_contract"),
+        ("not JSON", "formatting"),
+        ('{"sql":"DELETE FROM orders"}', "model_sql_forbidden"),
     ],
 )
 def test_shadow_failures_are_diagnosed_without_authority(raw, kind):
@@ -103,7 +103,9 @@ def test_shadow_failures_are_diagnosed_without_authority(raw, kind):
 
     with patch("sentinel.nlq.service.execute", side_effect=AssertionError("must not execute")):
         result = ask("unused", "What if demand increases at Warehouse 2?", planner=Shadow())
-    assert result["shadow_failure"] == kind
-    assert result["fallback_used"] and result["abstained"]
+    from sentinel.nlq.shadow import classify
+
+    assert kind in classify(raw, result["query_plan"])["classifications"]
+    assert not result["fallback_used"] and result["abstained"]
     assert result["effective_planner"] == "deterministic_rules"
     assert result["compiled_plan"]["sql"] is None

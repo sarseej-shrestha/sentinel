@@ -18,9 +18,10 @@ class Malformed:
 
 
 def test_unavailable_and_malformed_models(tmp_path):
-    for planner, status in ((Unavailable(), "unavailable"), (Malformed(), "abstained")):
+    for planner in (Unavailable(), Malformed()):
         record = ask(tmp_path / "unused.duckdb", "Show products", planner=planner)
-        assert record["status"] == status and record["abstained"]
+        assert record["status"] == "clarification" and record["abstained"]
+        assert record["model_output"] is None and not record["fallback_used"]
         assert record["query_result"] is None
 
 

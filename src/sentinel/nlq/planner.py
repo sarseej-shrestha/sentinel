@@ -152,10 +152,36 @@ class QwenPlanner:
         self.model.eval()
 
     def generate(self, question, retrieved):
+        return self.generate_turns(messages(question, retrieved))
+
+    def generate_resolution(self, question, retrieved):
+        from sentinel.nlq.authority import CHOICES, RESOLUTION_SCHEMA
+
+        return self.generate_turns(
+            [
+                {
+                    "role": "system",
+                    "content": "Propose a SQL-free resolution for diagnostics only. Return one JSON object matching this schema. Never emit SQL, infer missing values, or perform actions. Supported requests need canonical complete plans. Distinguish clarification_required, unsupported, unsafe and unavailable with a reason, fields and safe message. Reference date: "
+                    + AS_OF
+                    + ". Schema: "
+                    + json.dumps(RESOLUTION_SCHEMA)
+                    + ". Allowed choices: "
+                    + json.dumps(CHOICES),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"question": question, "untrusted_retrieved_context": retrieved}
+                    ),
+                },
+            ]
+        )
+
+    def generate_turns(self, turns):
         import torch
 
         inputs = self.tokenizer.apply_chat_template(
-            messages(question, retrieved),
+            turns,
             add_generation_prompt=True,
             return_tensors="pt",
             return_dict=True,

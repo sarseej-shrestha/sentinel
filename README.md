@@ -2,6 +2,31 @@
 
 Sentinel is a human-approved, read-only supply-chain operations console for CMPS 4200 HCI. The demo uses independently generated synthetic data. It supports bounded natural-language SQL questions, operational risk review, demand forecasts and what-if analysis, evidence-backed recommendations, simulated human decisions, and audit replay.
 
+## Verified planner authority
+
+`verified-planner-authority` makes deterministic planning the sole runtime authority. Ordinary requests do not load or call Qwen, BGE, or optional model dependencies. Registered intent/slot resolution, strict validation, the existing allowlisted compiler, AST checks and read-only execution determine every result. The guarantee is safe, validated behavior **within the bounded supported grammar**, with abstention outside it—not universal natural-language correctness.
+
+The SQL-free `resolution` contract distinguishes `supported`, `clarification_required`, `unsupported`, `unsafe`, and `unavailable`. Abstentions include a stable reason code, affected fields, safe wording and an audit event. Execution failures and empty evidence are `unavailable`; legacy `status` fields remain for compatibility. Canonical choices accompany missing-field clarifications. Model wording is accepted only from closed deterministic templates; invented values and free-form evidence claims are replaced. Verified evidence, human decisions and replay never depend on model text.
+
+Shadow work is explicitly deferred, not a background task that can delay or race the response:
+
+```sh
+python -m sentinel ask 'Why is Supplier B considered high risk?' --shadow
+# After the answer, use its shadow_request_id:
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m sentinel shadow REQUEST_ID --retrieval bge --timeout 60
+python -m scripts.verify_planner_authority --output artifacts/authority_check
+# Optional: after all responses, measure five real cached Qwen/BGE diagnostic jobs.
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m scripts.verify_planner_authority --output artifacts/authority_real_shadow --real-shadow
+```
+
+The separate `shadow` command loads the unchanged model in a disposable, time-bounded process. It appends diagnostic metadata linked to the original query event; it never compiles a proposal, revises the answer, changes evidence or approves actions. BGE retrieval is preserved there. Queued work remains pending until explicitly processed; run local audit writers serially. `ask --backend qwen`, `--retrieval`, and `--adapter` are no longer runtime options. Legacy Python planner/retriever/fallback arguments are ignored and cannot confer execution authority. `fallback_used` remains false because there is no model-first selection to fall back from. No training or replacement model is introduced.
+
+Verification: 601 baseline tests → 661 passing tests, including 60 authority/isolation regressions. On the same 36 development cases, supported matches stayed 23/23, correct negatives 13/13, and evidence linkage 23/23. Disabled and queued-shadow results were identical. Mean response latency was 266.92 ms before, 272.18 ms after with shadow disabled, and 290.65 ms when queuing diagnostics; these are single-host measurements, not a speed guarantee. Runtime-parent peak RSS was 0.51/0.52 GiB for disabled/queued modes. Five real cold Qwen/BGE diagnostic jobs subsequently took 8.17–14.64 seconds each (mean 11.07 seconds), peaked at 6.33 GiB worker RSS, and were rejected: four schema failures and one formatting failure. All 100 queued-run audit events verified; model processing left every preceding event unchanged.
+
+The original frozen holdout was run once after implementation, rules-only: supported matches remain 15/30, exact plans 32/48, safe negative abstentions 18/18, unsafe rejection 6/6, with all 15 evidence packs and 63 audit events verified. Exact negative classification is still 17/18, distinct from safe abstention. Both frozen checksums are unchanged. This change removes model authority and latency from requests; it does not improve or claim universal semantic coverage. The existing self-authorship/exposure limitations still apply.
+
+The measurements below describe earlier milestones unless explicitly labeled otherwise; their model-first fallback behavior is historical. Offline evaluation scripts still score genuine model proposals separately, but deterministic results are never counted as model success. Combined offline diagnostic latency is not user-facing request latency.
+
 ## Current Phase 2 status
 
 The executable coding work was implemented on `phase2-coding`: dataset research tooling, 14 canonical DuckDB tables, four semantic views, 11 failure fixtures, a constrained SQL-free planner interface, SQL safety, calibrated synthetic risk models, forecasting, recommendations, a command-line review gate, audit replay, training scripts, and reproducible evaluation. That branch retains its 376-test baseline. The separate `semantic-repair` branch passes 461 tests, adding 85 regressions and integrity checks without changing existing tests. The subsequent `robust-semantic-repair` branch passes 601 tests, preserving the compiler, AST validation, evidence and approval protections. General semantic coverage remains limited; independent promotion is blocked.
@@ -94,11 +119,11 @@ Excluded: real company data claims, healthcare data, external actions, autonomou
 
 ## Architecture and model stack
 
-The request path is: question → BGE-retrieved schema and metrics → SQL-free QueryPlan → schema, alias and request-grounding checks → deterministic SQL compiler → AST SQL checks → isolated read-only DuckDB query → verified evidence → deterministic recommendation → human simulation gate → audit snapshot.
+The request path is: question → deterministic canonicalization and intent/slot resolution → strict SQL-free QueryPlan validation → deterministic SQL compiler → AST SQL checks → isolated read-only DuckDB query → verified evidence → deterministic recommendation → human simulation gate → audit snapshot. Optional model/BGE work occurs only in deferred diagnostics.
 
 | Component | Implementation |
 | --- | --- |
-| Planner | `Qwen/Qwen2.5-Coder-1.5B-Instruct` proposes intent, entities, dates, metrics and scenario parameters; explicitly labeled deterministic fallback |
+| Planner | Registered deterministic intent planners are the sole authority; `Qwen/Qwen2.5-Coder-1.5B-Instruct` is deferred and diagnostic-only |
 | Plan compiler | Strict JSON Schema and per-intent requirements; canonical IDs; full-request grounding; fixed SQL templates and bound values only |
 | Retrieval | `BAAI/bge-small-en-v1.5` interface; lexical TF-IDF baseline for offline execution |
 | SQL safety | SQLGlot AST and column validation, four-view allowlist, documented equality joins, named parameters, maximum 200 rows, three-second worker deadline |
@@ -200,7 +225,8 @@ On a suitable host, install the optional model dependencies and explicitly downl
 python -m pip install -e '.[models]'
 python -c 'from sentinel.nlq.planner import QwenPlanner; QwenPlanner(local_files_only=False)'
 python -c 'from sentinel.nlq.retrieval import SchemaRetriever; SchemaRetriever("bge", local_files_only=False)'
-HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m sentinel ask 'Why is Supplier A considered high risk?' --backend qwen --retrieval bge
+python -m sentinel ask 'Why is Supplier A considered high risk?' --shadow
+HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m sentinel shadow REQUEST_ID --retrieval bge
 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python scripts/evaluate_query_plans.py --backend qwen --retrieval bge --repeats 3 --output artifacts/query_plan_evaluation
 python scripts/evaluate_query_plans.py --backend rules --retrieval lexical --repeats 1 --output artifacts/query_plan_reference
 ```
@@ -232,7 +258,7 @@ The previous direct-SQL spike produced 0/21 accepted outputs and 0/15 supported 
 
 Latency includes retrieval, generation, validation, compilation, SQL, analytics and audit; model initialization was measured separately at 3,513.79 ms. The before/after sets and completed work differ, so this is not a controlled speed comparison. Deterministic reference evaluation passed 24/24 plans and 15/15 supported requests without fallback. These are small development-set measurements, not unseen-language accuracy: decoding is greedy, repeats were identical, and the prompt was developed against this set. Gold query rows are compared using the same trusted compiler; separate fixture tests assert the monthly counts. Reports contain raw outputs, retrieved context, model revisions, plans, fallback flags, query rows and source fingerprints. Source changes during evaluation abort the run. Measurements and replay exports stay ignored; choose a new output directory for each run.
 
-Runtime defaults to local-only loading. Invalid or unavailable Qwen output uses the same validated deterministic fallback when the request is supported; unsupported requests still abstain. Audit records preserve `model_output`, `candidate_query_plan`, `plan_validation`, `fallback_used`, `effective_planner` and the compiled plan, so fallback success is never reported as successful model inference. Evaluation stops if the real model cannot load; it does not replace the measured backend with fixtures. The older technical-spike harness retains explicitly labeled failure injections.
+Only explicit deferred diagnostics load local model weights. Invalid or unavailable Qwen output cannot affect the deterministic response. `shadow_diagnostic` events classify formatting, schema, grounding, semantic and abstention disagreements; model output hashes and validated proposals stay separate from authoritative query/analysis events. Offline evaluation stops or records failure if the real model cannot load; it does not substitute fixtures. The technical spike retains labeled failure injections, now checking that model failures do not suppress supported deterministic answers.
 
 ### Frozen pretraining comparison
 
@@ -244,7 +270,7 @@ python -m scripts.compare_query_plans --rules-only --output artifacts/heldout_ru
 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 python -m scripts.compare_query_plans --repeats 1 --output artifacts/heldout_comparison
 ```
 
-Use a fresh output directory; existing evaluation databases are never overwritten. The comparison uses the same unmodified Qwen Instruct weights for a zero-shot contract/catalog arm and a detailed-prompt + four training-only examples + BGE arm. The deterministic arm uses the current bounded parser. The fallback arm replays the exact grounded generation through the product gate with fallback enabled, isolating the effect of fallback without generating a different answer. No gold labels enter prompts or grant execution authority. The detailed prompt is experimental and is not installed in the production console.
+Use a fresh output directory; existing evaluation databases are never overwritten. The comparison uses unchanged Qwen Instruct weights for zero-shot and grounded diagnostic arms. The current `authority_comparison_v2` protocol scores model proposals separately from deterministic execution. The legacy arm name `fallback` now denotes deterministic authority paired with the grounded diagnostic, not model selection; its fallback count is zero. Historical v1 latency and selection rates below are not directly comparable to this changed runtime. No gold labels enter prompts or grant execution authority.
 
 Model-only semantic scores compare canonical proposals with independent labels **before** production phrase grounding. Product acceptance and selected fallback-plan scores are separate: unfamiliar but representable requests can receive correct model proposals and still abstain through the unchanged safety gate. Invalid JSON gets no correct-negative-plan credit merely for being rejected. Unsafe-request rejection measures the complete guard, not model compliance. Reports include per-category numerators/denominators, raw generations, prompts, retrieval, source hashes, memory and latency. Fallback latency includes the observed shared inference cost plus separately measured replay; it is not an independent model call. One greedy pass measures 48 unique requests per arm, not a statistical generalization guarantee. Do not tune against these revealed results; freeze another unseen set for future iteration.
 
@@ -330,7 +356,7 @@ No QLoRA training is authorized by these evaluation commands. If separately appr
 ```sh
 python -m scripts.build_sft_dataset --version curated-v2
 python -m scripts.train_qlora --data data/training/query_plan_v2 --epochs 1 --max-length 4096
-python -m sentinel ask 'Why is Supplier A considered high risk?' --backend qwen --adapter models/sentinel-qlora
+# Adapter loading is not exposed by the authoritative runtime.
 ```
 
 The original `python scripts/build_sft_dataset.py` command remains available for the 41-example pilot in `data/training/query_plan_v1`. No raw Kaggle rows or SQL targets are used in either version. The training preflight rejects legacy contracts, invalid plans, altered curated labels and frozen-holdout leakage. Target questions are disjoint across splits, but schema, entity vocabulary, templates and shared training-only few-shot context overlap; these are not entity-held-out splits.
@@ -354,4 +380,4 @@ Raw downloads, local profiles, databases, training JSONL, model weights/adapters
 - Fixed dates, small entity counts, no authenticated reviewer identity, no concurrent-user workflow, and no external audit anchor. Local database owners can rewrite the database; the hash chain detects accidental edits, not a fully privileged adversary.
 - Repeated spike inputs are smoke tests. Timings include process startup and depend on hardware, interpreter and imports. Sparse history, invalid dates, stale stock and missing fields require review.
 
-Next model work: review the frozen comparison and the separate runtime-coverage limitation before proposing any training. Preserve this evaluation set; use a new unseen set for prompt iteration. Keep deterministic fallback enabled, and reject any future adapter that fails the semantic, latency or safety comparison. Forecast interval coverage also remains a limitation. Presentation and visual-design work remain a separate phase.
+Next model work: preserve deterministic authority and obtain independent evaluation before proposing any training. Preserve frozen sets; use development data for iteration. A future adapter cannot become a correctness dependency through this runtime. Forecast interval coverage remains a limitation. Presentation and visual-design work remain a separate phase.
