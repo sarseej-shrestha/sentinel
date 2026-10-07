@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+<title id="title">Flow 2 / Risk Requires Evidence</title>
+<desc id="desc">Backend behavior implemented; graphical interaction and navigation are proposed.. PROPOSED UI — not an implemented screen. Synthetic data and simulated decisions only.</desc>
+<g font-family="Arial, Helvetica, sans-serif">
+<rect width="1600" height="1100" fill="#0B1220"/>
+<text x="48" y="52" font-size="20" fill="#67E8F9">SENTINEL / CMPS 4200 / PHASE 2</text>
+<text x="48" y="102" font-size="36" fill="#F1F5F9">Flow 2 / Risk Requires Evidence</text>
+<text x="48" y="142" font-size="21" fill="#B8C5D6">Backend behavior implemented; graphical interaction and navigation are proposed.</text>
+<text x="48" y="183" font-size="22" fill="#FBBF24">PROPOSED UI — not an implemented screen</text>
+<text x="48" y="227" font-size="22" fill="#67E8F9">Inventory reviewer role placeholder — Phase 1 persona mapping MISSING</text>
+<text x="48" y="265" font-size="22" fill="#FBBF24">Synthetic exploratory material — not a completed user interview</text>
+<rect x="48" y="320" width="472" height="180" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="356" font-size="24" fill="#67E8F9">1. Ask risk question</text>
+<text x="68" y="396" font-size="21" fill="#F1F5F9">Stockout coverage or one named</text>
+<text x="68" y="426" font-size="21" fill="#F1F5F9">supplier.</text>
+<rect x="564" y="320" width="472" height="180" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="584" y="356" font-size="24" fill="#67E8F9">2. Read verified rows</text>
+<text x="584" y="396" font-size="21" fill="#F1F5F9">Inventory, demand or supplier</text>
+<text x="584" y="426" font-size="21" fill="#F1F5F9">observations.</text>
+<rect x="1080" y="320" width="472" height="180" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="1100" y="356" font-size="24" fill="#67E8F9">3. Usable evidence?</text>
+<text x="1100" y="396" font-size="21" fill="#F1F5F9">Empty or invalid: abstain, no</text>
+<text x="1100" y="426" font-size="21" fill="#F1F5F9">recommendation.</text>
+<rect x="1080" y="570" width="472" height="180" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="1100" y="606" font-size="24" fill="#67E8F9">4. Assess review risk</text>
+<text x="1100" y="646" font-size="21" fill="#F1F5F9">Synthetic model + rules; qualitative</text>
+<text x="1100" y="676" font-size="21" fill="#F1F5F9">drivers.</text>
+<rect x="564" y="570" width="472" height="180" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="584" y="606" font-size="24" fill="#67E8F9">5. Inspect evidence</text>
+<text x="584" y="646" font-size="21" fill="#F1F5F9">Snapshot ID, source rows and missing</text>
+<text x="584" y="676" font-size="21" fill="#F1F5F9">information.</text>
+<rect x="48" y="570" width="472" height="180" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="606" font-size="24" fill="#67E8F9">6. Refine / propose</text>
+<text x="68" y="646" font-size="21" fill="#F1F5F9">Revise question or enter human</text>
+<text x="68" y="676" font-size="21" fill="#F1F5F9">simulation gate.</text>
+<polygon fill="#67E8F9" points="520.0,412.0 542.0,412.0 542.0,417.0 554.0,410.0 542.0,403.0 542.0,408.0 520.0,408.0"/>
+<polygon fill="#67E8F9" points="1036.0,412.0 1058.0,412.0 1058.0,417.0 1070.0,410.0 1058.0,403.0 1058.0,408.0 1036.0,408.0"/>
+<polygon fill="#67E8F9" points="1314.0,500.0 1314.0,548.0 1309.0,548.0 1316.0,560.0 1323.0,548.0 1318.0,548.0 1318.0,500.0"/>
+<polygon fill="#67E8F9" points="1080.0,658.0 1058.0,658.0 1058.0,653.0 1046.0,660.0 1058.0,667.0 1058.0,662.0 1080.0,662.0"/>
+<polygon fill="#67E8F9" points="564.0,658.0 542.0,658.0 542.0,653.0 530.0,660.0 542.0,667.0 542.0,662.0 564.0,662.0"/>
+<rect x="1314.5" y="289" width="3" height="31" fill="#FBBF24"/>
+<rect x="284" y="287.5" width="1032" height="3" fill="#FBBF24"/>
+<rect x="282.5" y="289" width="3" height="18" fill="#FBBF24"/>
+<polygon fill="#FBBF24" points="282.0,307.0 282.0,308.0 277.0,308.0 284.0,320.0 291.0,308.0 286.0,308.0 286.0,307.0"/>
+<text x="330" y="311" font-size="19" fill="#FBBF24">Incomplete / invalid → clarify or refine; no execution</text>
+<text x="1338" y="542" font-size="18" fill="#67E8F9">Valid only</text>
+<rect x="48" y="810" width="1504" height="170" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="68" y="846" font-size="24" fill="#FBBF24">Recovery and user control</text>
+<text x="68" y="886" font-size="21" fill="#F1F5F9">Empty result is not low risk. Altered evidence blocks recommendations. Coverage is an estimate, not a guaranteed stockout.</text>
+<text x="68" y="916" font-size="21" fill="#F1F5F9">Loading preserves input; success links evidence; uncertain results name limitations. Refine submits a new request.</text>
+<text x="48" y="1035" font-size="21" fill="#B8C5D6">Synthetic data • Read-only analysis • Human-reviewed simulations • No external actions</text>
+<text x="48" y="1071" font-size="20" fill="#FBBF24">Implemented backend ≠ implemented frontend | Reference date: 2026-09-30</text>
+</g>
+</svg>

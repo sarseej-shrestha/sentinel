@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+<title id="title">Information Architecture</title>
+<desc id="desc">Six proposed screen types; result variants share one analysis workspace.. PROPOSED UI — not an implemented screen. Synthetic data and simulated decisions only.</desc>
+<g font-family="Arial, Helvetica, sans-serif">
+<rect width="1600" height="1100" fill="#0B1220"/>
+<text x="48" y="52" font-size="20" fill="#67E8F9">SENTINEL / CMPS 4200 / PHASE 2</text>
+<text x="48" y="102" font-size="36" fill="#F1F5F9">Information Architecture</text>
+<text x="48" y="142" font-size="21" fill="#B8C5D6">Six proposed screen types; result variants share one analysis workspace.</text>
+<text x="48" y="183" font-size="22" fill="#FBBF24">PROPOSED UI — not an implemented screen</text>
+<rect x="540" y="220" width="520" height="95" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="560" y="256" font-size="24" fill="#67E8F9">Sentinel workspace</text>
+<text x="560" y="296" font-size="21" fill="#F1F5F9">Bounded supply-chain questions</text>
+<polygon fill="#67E8F9" points="699.5,313.1 531.2,355.1 529.9,350.3 520.0,360.0 533.3,363.9 532.1,359.0 700.5,316.9"/>
+<polygon fill="#FBBF24" points="999.7,317.0 1303.8,360.3 1303.1,365.2 1316.0,360.0 1305.1,351.4 1304.4,356.3 1000.3,313.0"/>
+<text x="48" y="378" font-size="23" fill="#67E8F9">PRIMARY WORKSPACE / S1–S5</text>
+<text x="1100" y="378" font-size="23" fill="#FBBF24">SECONDARY / OPTIONAL</text>
+<rect x="48" y="405" width="472" height="155" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="441" font-size="24" fill="#67E8F9">S1 / Ask</text>
+<text x="68" y="481" font-size="21" fill="#F1F5F9">Supported examples, canonical</text>
+<text x="68" y="511" font-size="21" fill="#F1F5F9">choices and clarification.</text>
+<rect x="564" y="405" width="472" height="155" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="584" y="441" font-size="24" fill="#67E8F9">S2 / Analysis</text>
+<text x="584" y="481" font-size="21" fill="#F1F5F9">Lateness • Risk • Forecast • Demand</text>
+<text x="584" y="511" font-size="21" fill="#F1F5F9">what-if</text>
+<rect x="48" y="585" width="472" height="155" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="621" font-size="24" fill="#67E8F9">S3 / Evidence</text>
+<text x="68" y="661" font-size="21" fill="#F1F5F9">Verified rows, metric definitions,</text>
+<text x="68" y="691" font-size="21" fill="#F1F5F9">assumptions and query details.</text>
+<rect x="564" y="585" width="472" height="155" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="584" y="621" font-size="24" fill="#67E8F9">S4 / Human review</text>
+<text x="584" y="661" font-size="21" fill="#F1F5F9">Edit a pending note; explicitly</text>
+<text x="584" y="691" font-size="21" fill="#F1F5F9">approve or reject a simulation.</text>
+<rect x="48" y="765" width="472" height="155" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="801" font-size="24" fill="#67E8F9">S5 / Audit &amp; replay</text>
+<text x="68" y="841" font-size="21" fill="#F1F5F9">Verify hashes and inspect stored</text>
+<text x="68" y="871" font-size="21" fill="#F1F5F9">snapshots; never re-execute.</text>
+<rect x="1100" y="405" width="452" height="230" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1120" y="441" font-size="24" fill="#FBBF24">S6 / Diagnostics</text>
+<text x="1120" y="481" font-size="21" fill="#F1F5F9">Optional Qwen + BGE; deferred,</text>
+<text x="1120" y="511" font-size="21" fill="#F1F5F9">non-authoritative diagnostics.</text>
+<rect x="1100" y="670" width="452" height="250" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1120" y="706" font-size="24" fill="#FBBF24">Why separate?</text>
+<text x="1120" y="746" font-size="21" fill="#F1F5F9">Not required for answers. No SQL,</text>
+<text x="1120" y="776" font-size="21" fill="#F1F5F9">evidence or approval authority.</text>
+<text x="1120" y="806" font-size="21" fill="#F1F5F9">Persona mapping MISSING; no user</text>
+<text x="1120" y="836" font-size="21" fill="#F1F5F9">research claimed.</text>
+<text x="48" y="970" font-size="22" fill="#FBBF24">Navigation: Ask → Analysis → Evidence → Human review → Audit. Diagnostics remains separate.</text>
+<text x="48" y="1035" font-size="21" fill="#B8C5D6">Synthetic data • Read-only analysis • Human-reviewed simulations • No external actions</text>
+<text x="48" y="1071" font-size="20" fill="#FBBF24">Implemented backend ≠ implemented frontend | Reference date: 2026-09-30</text>
+</g>
+</svg>

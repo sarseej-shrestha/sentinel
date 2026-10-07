@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+<title id="title">S6 / Experimental Diagnostics</title>
+<desc id="desc">Optional secondary workflow; never the authoritative answer engine.. PROPOSED UI — not an implemented screen. Synthetic data and simulated decisions only.</desc>
+<g font-family="Arial, Helvetica, sans-serif">
+<rect width="1600" height="1100" fill="#0B1220"/>
+<text x="48" y="52" font-size="20" fill="#67E8F9">SENTINEL / CMPS 4200 / PHASE 2</text>
+<text x="48" y="102" font-size="36" fill="#F1F5F9">S6 / Experimental Diagnostics</text>
+<text x="48" y="142" font-size="21" fill="#B8C5D6">Optional secondary workflow; never the authoritative answer engine.</text>
+<text x="48" y="183" font-size="22" fill="#FBBF24">PROPOSED UI — not an implemented screen</text>
+<rect x="48" y="222" width="212" height="765" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="68" y="274" font-size="21" fill="#67E8F9">Ask</text>
+<text x="68" y="334" font-size="21" fill="#B8C5D6">Analysis</text>
+<text x="68" y="394" font-size="21" fill="#B8C5D6">Evidence</text>
+<text x="68" y="454" font-size="21" fill="#B8C5D6">Human review</text>
+<text x="68" y="514" font-size="21" fill="#B8C5D6">Audit &amp; replay</text>
+<text x="68" y="574" font-size="21" fill="#B8C5D6">Diagnostics</text>
+<text x="68" y="670" font-size="20" fill="#FBBF24">DEMO ONLY</text>
+<text x="68" y="710" font-size="20" fill="#F1F5F9">2026-09-30</text>
+<text x="68" y="767" font-size="19" fill="#B8C5D6">No external</text>
+<text x="68" y="798" font-size="19" fill="#B8C5D6">actions</text>
+<rect x="288" y="222" width="780" height="405" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="308" y="258" font-size="24" fill="#67E8F9">Deferred model diagnostic / NOT SELECTED</text>
+<text x="310" y="306" font-size="22" fill="#F1F5F9">Qwen/Qwen2.5-Coder-1.5B-Instruct</text>
+<text x="310" y="355" font-size="22" fill="#F1F5F9">BAAI/bge-small-en-v1.5 — local schema retrieval</text>
+<text x="310" y="404" font-size="22" fill="#F1F5F9">Original authoritative plan stays pinned.</text>
+<text x="310" y="453" font-size="22" fill="#F1F5F9">Inspect formatting / schema / semantic disagreement.</text>
+<text x="310" y="502" font-size="22" fill="#F1F5F9">Latest 5 cold jobs: 0 accepted proposals.</text>
+<text x="310" y="551" font-size="22" fill="#F1F5F9">No “Apply model answer” or SQL execution control.</text>
+<rect x="1092" y="222" width="460" height="405" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1112" y="258" font-size="24" fill="#FBBF24">Isolation and recovery</text>
+<text x="1113" y="305" font-size="20" fill="#F1F5F9">Run only after explicit queue +</text>
+<text x="1113" y="334" font-size="20" fill="#F1F5F9">command.</text>
+<text x="1113" y="375" font-size="20" fill="#F1F5F9">Unavailable / timeout: original</text>
+<text x="1113" y="404" font-size="20" fill="#F1F5F9">answer unchanged.</text>
+<text x="1113" y="445" font-size="20" fill="#F1F5F9">Cost: NOT MEASURED.</text>
+<text x="1113" y="515" font-size="20" fill="#F1F5F9">Rate limits: NOT MEASURED.</text>
+<rect x="292" y="650" width="184" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="306" y="682" font-size="20" fill="#67E8F9">Run queued job</text>
+<rect x="492" y="650" width="228" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="506" y="682" font-size="20" fill="#67E8F9">Inspect diagnostic</text>
+<rect x="736" y="650" width="155" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="750" y="682" font-size="20" fill="#67E8F9">New request</text>
+<text x="292" y="744" font-size="20" fill="#67E8F9">STATE VARIANTS / proposed presentation of implemented outcomes</text>
+<rect x="288" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="308" y="803" font-size="24" fill="#67E8F9">INITIAL</text>
+<text x="308" y="843" font-size="21" fill="#F1F5F9">OFF by default;</text>
+<text x="308" y="873" font-size="21" fill="#F1F5F9">no model loaded.</text>
+<rect x="542" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="562" y="803" font-size="24" fill="#67E8F9">LOADING</text>
+<text x="562" y="843" font-size="21" fill="#F1F5F9">Separate</text>
+<text x="562" y="873" font-size="21" fill="#F1F5F9">diagnostic</text>
+<text x="562" y="903" font-size="21" fill="#F1F5F9">process; answer</text>
+<text x="562" y="933" font-size="21" fill="#F1F5F9">remains usable.</text>
+<rect x="796" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="816" y="803" font-size="24" fill="#67E8F9">SUCCESS</text>
+<text x="816" y="843" font-size="21" fill="#F1F5F9">Valid</text>
+<text x="816" y="873" font-size="21" fill="#F1F5F9">diagnostic, if</text>
+<text x="816" y="903" font-size="21" fill="#F1F5F9">any, is still</text>
+<text x="816" y="933" font-size="21" fill="#F1F5F9">never selected.</text>
+<rect x="1050" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1070" y="803" font-size="24" fill="#FBBF24">UNCERTAIN</text>
+<text x="1070" y="843" font-size="21" fill="#F1F5F9">Wrong grounding</text>
+<text x="1070" y="873" font-size="21" fill="#F1F5F9">or unsupported</text>
+<text x="1070" y="903" font-size="21" fill="#F1F5F9">claims rejected.</text>
+<rect x="1304" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1324" y="803" font-size="24" fill="#FBBF24">ERROR</text>
+<text x="1324" y="843" font-size="21" fill="#F1F5F9">Malformed /</text>
+<text x="1324" y="873" font-size="21" fill="#F1F5F9">empty / timeout:</text>
+<text x="1324" y="903" font-size="21" fill="#F1F5F9">log diagnostic</text>
+<text x="1324" y="933" font-size="21" fill="#F1F5F9">failure.</text>
+<text x="48" y="1035" font-size="21" fill="#B8C5D6">Synthetic data • Read-only analysis • Human-reviewed simulations • No external actions</text>
+<text x="48" y="1071" font-size="20" fill="#FBBF24">Implemented backend ≠ implemented frontend | Reference date: 2026-09-30</text>
+</g>
+</svg>

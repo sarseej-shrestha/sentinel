@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+<title id="title">S2-W / Demand What-if</title>
+<desc id="desc">F4 • Arithmetic sensitivity only; no operational action.. PROPOSED UI — not an implemented screen. Synthetic data and simulated decisions only.</desc>
+<g font-family="Arial, Helvetica, sans-serif">
+<rect width="1600" height="1100" fill="#0B1220"/>
+<text x="48" y="52" font-size="20" fill="#67E8F9">SENTINEL / CMPS 4200 / PHASE 2</text>
+<text x="48" y="102" font-size="36" fill="#F1F5F9">S2-W / Demand What-if</text>
+<text x="48" y="142" font-size="21" fill="#B8C5D6">F4 • Arithmetic sensitivity only; no operational action.</text>
+<text x="48" y="183" font-size="22" fill="#FBBF24">PROPOSED UI — not an implemented screen</text>
+<rect x="48" y="222" width="212" height="765" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="68" y="274" font-size="21" fill="#67E8F9">Ask</text>
+<text x="68" y="334" font-size="21" fill="#B8C5D6">Analysis</text>
+<text x="68" y="394" font-size="21" fill="#B8C5D6">Evidence</text>
+<text x="68" y="454" font-size="21" fill="#B8C5D6">Human review</text>
+<text x="68" y="514" font-size="21" fill="#B8C5D6">Audit &amp; replay</text>
+<text x="68" y="574" font-size="21" fill="#B8C5D6">Diagnostics</text>
+<text x="68" y="670" font-size="20" fill="#FBBF24">DEMO ONLY</text>
+<text x="68" y="710" font-size="20" fill="#F1F5F9">2026-09-30</text>
+<text x="68" y="767" font-size="19" fill="#B8C5D6">No external</text>
+<text x="68" y="798" font-size="19" fill="#B8C5D6">actions</text>
+<rect x="288" y="222" width="780" height="405" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="308" y="258" font-size="24" fill="#67E8F9">Warehouse W2 / demand +13%</text>
+<text x="310" y="306" font-size="22" fill="#F1F5F9">Inputs: W2    |    explicit demand increase: 13%</text>
+<text x="310" y="355" font-size="22" fill="#F1F5F9">Product P1             Baseline           Scenario</text>
+<text x="310" y="404" font-size="22" fill="#F1F5F9">Daily demand              14.54                 16.43</text>
+<text x="310" y="453" font-size="22" fill="#F1F5F9">Days of cover                6.74                   5.97</text>
+<text x="310" y="502" font-size="22" fill="#F1F5F9">Synthetic measured values; rounded display.</text>
+<text x="310" y="551" font-size="22" fill="#F1F5F9">[ Comparison table continues for other products ]</text>
+<rect x="1092" y="222" width="460" height="405" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1112" y="258" font-size="24" fill="#FBBF24">Assumptions</text>
+<text x="1113" y="305" font-size="20" fill="#F1F5F9">Stock and replenishment remain</text>
+<text x="1113" y="334" font-size="20" fill="#F1F5F9">fixed.</text>
+<text x="1113" y="375" font-size="20" fill="#F1F5F9">Price and supplier capacity remain</text>
+<text x="1113" y="404" font-size="20" fill="#F1F5F9">fixed.</text>
+<text x="1113" y="445" font-size="20" fill="#F1F5F9">Not a causal prediction.</text>
+<text x="1113" y="515" font-size="20" fill="#F1F5F9">Missing percentage must not get a</text>
+<text x="1113" y="544" font-size="20" fill="#F1F5F9">default.</text>
+<rect x="292" y="650" width="195" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="306" y="682" font-size="20" fill="#67E8F9">Refine scenario</text>
+<rect x="503" y="650" width="206" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="517" y="682" font-size="20" fill="#67E8F9">Inspect evidence</text>
+<rect x="725" y="650" width="228" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="739" y="682" font-size="20" fill="#67E8F9">Propose simulation</text>
+<text x="292" y="744" font-size="20" fill="#67E8F9">STATE VARIANTS / proposed presentation of implemented outcomes</text>
+<rect x="288" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="308" y="803" font-size="24" fill="#67E8F9">INITIAL</text>
+<text x="308" y="843" font-size="21" fill="#F1F5F9">Enter warehouse</text>
+<text x="308" y="873" font-size="21" fill="#F1F5F9">and explicit</text>
+<text x="308" y="903" font-size="21" fill="#F1F5F9">increase.</text>
+<rect x="542" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="562" y="803" font-size="24" fill="#67E8F9">LOADING</text>
+<text x="562" y="843" font-size="21" fill="#F1F5F9">Validate</text>
+<text x="562" y="873" font-size="21" fill="#F1F5F9">parameters;</text>
+<text x="562" y="903" font-size="21" fill="#F1F5F9">calculate</text>
+<text x="562" y="933" font-size="21" fill="#F1F5F9">comparison.</text>
+<rect x="796" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="816" y="803" font-size="24" fill="#67E8F9">SUCCESS</text>
+<text x="816" y="843" font-size="21" fill="#F1F5F9">Baseline and</text>
+<text x="816" y="873" font-size="21" fill="#F1F5F9">scenario shown</text>
+<text x="816" y="903" font-size="21" fill="#F1F5F9">side by side.</text>
+<rect x="1050" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1070" y="803" font-size="24" fill="#FBBF24">UNCERTAIN</text>
+<text x="1070" y="843" font-size="21" fill="#F1F5F9">Assumptions</text>
+<text x="1070" y="873" font-size="21" fill="#F1F5F9">always visible;</text>
+<text x="1070" y="903" font-size="21" fill="#F1F5F9">no confidence</text>
+<text x="1070" y="933" font-size="21" fill="#F1F5F9">score.</text>
+<rect x="1304" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1324" y="803" font-size="24" fill="#FBBF24">ERROR</text>
+<text x="1324" y="843" font-size="21" fill="#F1F5F9">Unknown entity /</text>
+<text x="1324" y="873" font-size="21" fill="#F1F5F9">missing amount:</text>
+<text x="1324" y="903" font-size="21" fill="#F1F5F9">clarify.</text>
+<text x="48" y="1035" font-size="21" fill="#B8C5D6">Synthetic data • Read-only analysis • Human-reviewed simulations • No external actions</text>
+<text x="48" y="1071" font-size="20" fill="#FBBF24">Implemented backend ≠ implemented frontend | Reference date: 2026-09-30</text>
+</g>
+</svg>

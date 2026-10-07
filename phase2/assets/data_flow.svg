@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+<title id="title">Data Flow &amp; Trust Boundary</title>
+<desc id="desc">Deterministic planning is the sole authoritative answer path. Optional diagnostics are isolated.. PROPOSED UI — not an implemented screen. Synthetic data and simulated decisions only.</desc>
+<g font-family="Arial, Helvetica, sans-serif">
+<rect width="1600" height="1100" fill="#0B1220"/>
+<text x="48" y="52" font-size="20" fill="#67E8F9">SENTINEL / CMPS 4200 / PHASE 2</text>
+<text x="48" y="102" font-size="36" fill="#F1F5F9">Data Flow &amp; Trust Boundary</text>
+<text x="48" y="142" font-size="21" fill="#B8C5D6">Deterministic planning is the sole authoritative answer path. Optional diagnostics are isolated.</text>
+<text x="48" y="183" font-size="22" fill="#FBBF24">PROPOSED UI — not an implemented screen</text>
+<rect x="48" y="235" width="340" height="150" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="271" font-size="24" fill="#67E8F9">User / proposed UI</text>
+<text x="68" y="311" font-size="21" fill="#F1F5F9">Question and canonical</text>
+<text x="68" y="341" font-size="21" fill="#F1F5F9">choices</text>
+<polygon fill="#67E8F9" points="388.0,312.0 414.0,312.0 414.0,317.0 426.0,310.0 414.0,303.0 414.0,308.0 388.0,308.0"/>
+<rect x="436" y="235" width="340" height="150" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="456" y="271" font-size="24" fill="#67E8F9">Local backend</text>
+<text x="456" y="311" font-size="21" fill="#F1F5F9">Deterministic intent +</text>
+<text x="456" y="341" font-size="21" fill="#F1F5F9">slot resolution</text>
+<polygon fill="#67E8F9" points="776.0,312.0 802.0,312.0 802.0,317.0 814.0,310.0 802.0,303.0 802.0,308.0 776.0,308.0"/>
+<rect x="824" y="235" width="340" height="150" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="844" y="271" font-size="24" fill="#67E8F9">Typed QueryPlan</text>
+<text x="844" y="311" font-size="21" fill="#F1F5F9">Strict SQL-free</text>
+<text x="844" y="341" font-size="21" fill="#F1F5F9">validation</text>
+<polygon fill="#67E8F9" points="1164.0,312.0 1190.0,312.0 1190.0,317.0 1202.0,310.0 1190.0,303.0 1190.0,308.0 1164.0,308.0"/>
+<rect x="1212" y="235" width="340" height="150" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="1232" y="271" font-size="24" fill="#67E8F9">SQL compiler</text>
+<text x="1232" y="311" font-size="21" fill="#F1F5F9">Allowlisted templates +</text>
+<text x="1232" y="341" font-size="21" fill="#F1F5F9">AST check</text>
+<polygon fill="#67E8F9" points="1380.0,385.0 1380.0,428.0 1375.0,428.0 1382.0,440.0 1389.0,428.0 1384.0,428.0 1384.0,385.0"/>
+<rect x="1212" y="455" width="340" height="165" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="1232" y="491" font-size="24" fill="#67E8F9">Read-only DuckDB</text>
+<text x="1232" y="531" font-size="21" fill="#F1F5F9">Synthetic views; 200</text>
+<text x="1232" y="561" font-size="21" fill="#F1F5F9">rows; 3-second SQL</text>
+<text x="1232" y="591" font-size="21" fill="#F1F5F9">deadline</text>
+<polygon fill="#67E8F9" points="1212.0,535.0 1186.0,535.0 1186.0,530.0 1174.0,537.0 1186.0,544.0 1186.0,539.0 1212.0,539.0"/>
+<rect x="824" y="455" width="340" height="165" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="844" y="491" font-size="24" fill="#67E8F9">Evidence + analytics</text>
+<text x="844" y="531" font-size="21" fill="#F1F5F9">Verify snapshot; risk,</text>
+<text x="844" y="561" font-size="21" fill="#F1F5F9">forecast and scenario</text>
+<text x="844" y="591" font-size="21" fill="#F1F5F9">rules</text>
+<polygon fill="#67E8F9" points="824.0,535.0 798.0,535.0 798.0,530.0 786.0,537.0 798.0,544.0 798.0,539.0 824.0,539.0"/>
+<rect x="436" y="455" width="340" height="165" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="456" y="491" font-size="24" fill="#67E8F9">Human review</text>
+<text x="456" y="531" font-size="21" fill="#F1F5F9">Named reviewer; simulated</text>
+<text x="456" y="561" font-size="21" fill="#F1F5F9">decision only</text>
+<polygon fill="#67E8F9" points="436.0,535.0 410.0,535.0 410.0,530.0 398.0,537.0 410.0,544.0 410.0,539.0 436.0,539.0"/>
+<rect x="48" y="455" width="340" height="165" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="491" font-size="24" fill="#67E8F9">Audit + replay</text>
+<text x="68" y="531" font-size="21" fill="#F1F5F9">Trusted append; hash</text>
+<text x="68" y="561" font-size="21" fill="#F1F5F9">links; snapshot replay</text>
+<text x="48" y="655" font-size="22" fill="#67E8F9">Verified results return to the user before any optional shadow model job.</text>
+<rect x="48" y="680" width="690" height="155" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="716" font-size="24" fill="#67E8F9">Local storage</text>
+<text x="68" y="756" font-size="21" fill="#F1F5F9">Synthetic records, request plans, query evidence,</text>
+<text x="68" y="786" font-size="21" fill="#F1F5F9">human edits, decisions and audit hashes.</text>
+<rect x="790" y="680" width="762" height="155" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="810" y="716" font-size="24" fill="#FBBF24">Optional diagnostic path ONLY</text>
+<text x="810" y="756" font-size="21" fill="#F1F5F9">Explicit queue → local BGE schema retrieval → local Qwen</text>
+<text x="810" y="786" font-size="21" fill="#F1F5F9">SQL-free proposal → diagnostic validation → audit metadata.</text>
+<text x="810" y="875" font-size="22" fill="#FBBF24">NO path to SQL compilation, evidence edits or approval.</text>
+<text x="48" y="925" font-size="23" fill="#F1F5F9">Normal requests load neither Qwen nor BGE. No hosted AI inference provider is used.</text>
+<text x="48" y="969" font-size="21" fill="#B8C5D6">Audit writes use trusted application code; business-query connections remain read-only.</text>
+<text x="48" y="1035" font-size="21" fill="#B8C5D6">Synthetic data • Read-only analysis • Human-reviewed simulations • No external actions</text>
+<text x="48" y="1071" font-size="20" fill="#FBBF24">Implemented backend ≠ implemented frontend | Reference date: 2026-09-30</text>
+</g>
+</svg>

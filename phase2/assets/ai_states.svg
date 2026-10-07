@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+<title id="title">AI States &amp; Recovery</title>
+<desc id="desc">The authoritative result and experimental diagnostics have separate failure states.. PROPOSED UI — not an implemented screen. Synthetic data and simulated decisions only.</desc>
+<g font-family="Arial, Helvetica, sans-serif">
+<rect width="1600" height="1100" fill="#0B1220"/>
+<text x="48" y="52" font-size="20" fill="#67E8F9">SENTINEL / CMPS 4200 / PHASE 2</text>
+<text x="48" y="102" font-size="36" fill="#F1F5F9">AI States &amp; Recovery</text>
+<text x="48" y="142" font-size="21" fill="#B8C5D6">The authoritative result and experimental diagnostics have separate failure states.</text>
+<text x="48" y="183" font-size="22" fill="#FBBF24">PROPOSED UI — not an implemented screen</text>
+<rect x="48" y="225" width="280" height="195" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="68" y="261" font-size="24" fill="#67E8F9">INITIAL</text>
+<text x="68" y="301" font-size="21" fill="#F1F5F9">Supported task</text>
+<text x="68" y="331" font-size="21" fill="#F1F5F9">examples; no answer</text>
+<text x="68" y="361" font-size="21" fill="#F1F5F9">yet.</text>
+<rect x="353" y="225" width="280" height="195" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="373" y="261" font-size="24" fill="#67E8F9">LOADING</text>
+<text x="373" y="301" font-size="21" fill="#F1F5F9">Indeterminate</text>
+<text x="373" y="331" font-size="21" fill="#F1F5F9">indicator; preserve</text>
+<text x="373" y="361" font-size="21" fill="#F1F5F9">input.</text>
+<rect x="658" y="225" width="280" height="195" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="678" y="261" font-size="24" fill="#67E8F9">SUCCESS</text>
+<text x="678" y="301" font-size="21" fill="#F1F5F9">Validated result</text>
+<text x="678" y="331" font-size="21" fill="#F1F5F9">with verified</text>
+<text x="678" y="361" font-size="21" fill="#F1F5F9">evidence.</text>
+<rect x="963" y="225" width="280" height="195" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="983" y="261" font-size="24" fill="#FBBF24">UNCERTAIN</text>
+<text x="983" y="301" font-size="21" fill="#F1F5F9">Name missing fields</text>
+<text x="983" y="331" font-size="21" fill="#F1F5F9">or data limits; no</text>
+<text x="983" y="361" font-size="21" fill="#F1F5F9">confidence score.</text>
+<rect x="1268" y="225" width="280" height="195" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1288" y="261" font-size="24" fill="#FBBF24">ERROR</text>
+<text x="1288" y="301" font-size="21" fill="#F1F5F9">Safe explanation; no</text>
+<text x="1288" y="331" font-size="21" fill="#F1F5F9">partial</text>
+<text x="1288" y="361" font-size="21" fill="#F1F5F9">recommendation.</text>
+<rect x="48" y="447" width="1504" height="57" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="65" y="483" font-size="21" fill="#67E8F9">Missing / ambiguous input</text>
+<text x="590" y="483" font-size="21" fill="#F1F5F9">Ask for exact canonical fields; never guess.</text>
+<rect x="48" y="513" width="1504" height="57" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="65" y="549" font-size="21" fill="#67E8F9">Empty / changed evidence</text>
+<text x="590" y="549" font-size="21" fill="#F1F5F9">Audited abstention; block recommendation and proposal.</text>
+<rect x="48" y="579" width="1504" height="57" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="65" y="615" font-size="21" fill="#67E8F9">SQL timeout / service unavailable</text>
+<text x="590" y="615" font-size="21" fill="#F1F5F9">No result; preserve input for a new explicit request.</text>
+<rect x="48" y="645" width="1504" height="57" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="65" y="681" font-size="21" fill="#67E8F9">Qwen timeout / unavailable</text>
+<text x="590" y="681" font-size="21" fill="#F1F5F9">Diagnostic failure only; deterministic answer unchanged.</text>
+<rect x="48" y="711" width="1504" height="57" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="65" y="747" font-size="21" fill="#67E8F9">Malformed / wrong model output</text>
+<text x="590" y="747" font-size="21" fill="#F1F5F9">Reject or classify disagreement; never execute proposal.</text>
+<rect x="48" y="777" width="1504" height="57" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="65" y="813" font-size="21" fill="#67E8F9">Unsafe / inappropriate output</text>
+<text x="590" y="813" font-size="21" fill="#F1F5F9">Block unsafe requests; unsupported wording uses verified templates.</text>
+<rect x="48" y="843" width="1504" height="57" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="65" y="879" font-size="21" fill="#67E8F9">Rate limits / cost</text>
+<text x="590" y="879" font-size="21" fill="#F1F5F9">NOT MEASURED. No hosted-service recovery is claimed.</text>
+<text x="48" y="962" font-size="22" fill="#FBBF24">Refine → new request. Revert unsaved edits only. Final decisions cannot be undone.</text>
+<text x="48" y="1035" font-size="21" fill="#B8C5D6">Synthetic data • Read-only analysis • Human-reviewed simulations • No external actions</text>
+<text x="48" y="1071" font-size="20" fill="#FBBF24">Implemented backend ≠ implemented frontend | Reference date: 2026-09-30</text>
+</g>
+</svg>

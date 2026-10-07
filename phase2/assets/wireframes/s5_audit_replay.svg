@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+<title id="title">S5 / Audit &amp; Replay</title>
+<desc id="desc">F5 • Replay returns stored snapshots; it does not run SQL or actions.. PROPOSED UI — not an implemented screen. Synthetic data and simulated decisions only.</desc>
+<g font-family="Arial, Helvetica, sans-serif">
+<rect width="1600" height="1100" fill="#0B1220"/>
+<text x="48" y="52" font-size="20" fill="#67E8F9">SENTINEL / CMPS 4200 / PHASE 2</text>
+<text x="48" y="102" font-size="36" fill="#F1F5F9">S5 / Audit &amp; Replay</text>
+<text x="48" y="142" font-size="21" fill="#B8C5D6">F5 • Replay returns stored snapshots; it does not run SQL or actions.</text>
+<text x="48" y="183" font-size="22" fill="#FBBF24">PROPOSED UI — not an implemented screen</text>
+<rect x="48" y="222" width="212" height="765" rx="14" fill="#142033" stroke="#34465F" stroke-width="2"/>
+<text x="68" y="274" font-size="21" fill="#67E8F9">Ask</text>
+<text x="68" y="334" font-size="21" fill="#B8C5D6">Analysis</text>
+<text x="68" y="394" font-size="21" fill="#B8C5D6">Evidence</text>
+<text x="68" y="454" font-size="21" fill="#B8C5D6">Human review</text>
+<text x="68" y="514" font-size="21" fill="#B8C5D6">Audit &amp; replay</text>
+<text x="68" y="574" font-size="21" fill="#B8C5D6">Diagnostics</text>
+<text x="68" y="670" font-size="20" fill="#FBBF24">DEMO ONLY</text>
+<text x="68" y="710" font-size="20" fill="#F1F5F9">2026-09-30</text>
+<text x="68" y="767" font-size="19" fill="#B8C5D6">No external</text>
+<text x="68" y="798" font-size="19" fill="#B8C5D6">actions</text>
+<rect x="288" y="222" width="780" height="405" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="308" y="258" font-size="24" fill="#67E8F9">Ordered audit history</text>
+<text x="310" y="306" font-size="22" fill="#F1F5F9">[ Verified event count and actual head hash ]</text>
+<text x="310" y="355" font-size="22" fill="#F1F5F9">Time     Actor     Event             Revision</text>
+<text x="310" y="404" font-size="22" fill="#F1F5F9">…        human     action_edit       2</text>
+<text x="310" y="453" font-size="22" fill="#F1F5F9">…        human     action_approve    2</text>
+<text x="310" y="502" font-size="22" fill="#F1F5F9">Select event → original request and evidence.</text>
+<text x="310" y="551" font-size="22" fill="#F1F5F9">Timeline is schematic, not fabricated audit output.</text>
+<rect x="1092" y="222" width="460" height="405" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1112" y="258" font-size="24" fill="#FBBF24">Integrity boundary</text>
+<text x="1113" y="305" font-size="20" fill="#F1F5F9">Canonical JSON + SHA-256 hash</text>
+<text x="1113" y="334" font-size="20" fill="#F1F5F9">links.</text>
+<text x="1113" y="375" font-size="20" fill="#F1F5F9">Modified or reordered events are</text>
+<text x="1113" y="404" font-size="20" fill="#F1F5F9">detected.</text>
+<text x="1113" y="445" font-size="20" fill="#F1F5F9">Not external authentication or</text>
+<text x="1113" y="474" font-size="20" fill="#F1F5F9">tamper-proof storage.</text>
+<text x="1113" y="515" font-size="20" fill="#F1F5F9">Final decisions cannot be undone.</text>
+<rect x="292" y="650" width="162" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="306" y="682" font-size="20" fill="#67E8F9">Verify chain</text>
+<rect x="470" y="650" width="195" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="484" y="682" font-size="20" fill="#67E8F9">Replay snapshot</text>
+<rect x="681" y="650" width="173" height="49" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="695" y="682" font-size="20" fill="#67E8F9">Inspect event</text>
+<text x="292" y="744" font-size="20" fill="#67E8F9">STATE VARIANTS / proposed presentation of implemented outcomes</text>
+<rect x="288" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="308" y="803" font-size="24" fill="#67E8F9">INITIAL</text>
+<text x="308" y="843" font-size="21" fill="#F1F5F9">No recorded</text>
+<text x="308" y="873" font-size="21" fill="#F1F5F9">events.</text>
+<rect x="542" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="562" y="803" font-size="24" fill="#67E8F9">LOADING</text>
+<text x="562" y="843" font-size="21" fill="#F1F5F9">Check event</text>
+<text x="562" y="873" font-size="21" fill="#F1F5F9">sequence and</text>
+<text x="562" y="903" font-size="21" fill="#F1F5F9">hashes.</text>
+<rect x="796" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#67E8F9" stroke-width="2"/>
+<text x="816" y="803" font-size="24" fill="#67E8F9">SUCCESS</text>
+<text x="816" y="843" font-size="21" fill="#F1F5F9">Verified stored</text>
+<text x="816" y="873" font-size="21" fill="#F1F5F9">decision and</text>
+<text x="816" y="903" font-size="21" fill="#F1F5F9">original</text>
+<text x="816" y="933" font-size="21" fill="#F1F5F9">evidence.</text>
+<rect x="1050" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1070" y="803" font-size="24" fill="#FBBF24">UNCERTAIN</text>
+<text x="1070" y="843" font-size="21" fill="#F1F5F9">Local chain</text>
+<text x="1070" y="873" font-size="21" fill="#F1F5F9">lacks</text>
+<text x="1070" y="903" font-size="21" fill="#F1F5F9">independent</text>
+<text x="1070" y="933" font-size="21" fill="#F1F5F9">authentication.</text>
+<rect x="1304" y="767" width="239" height="220" rx="14" fill="#142033" stroke="#FBBF24" stroke-width="2"/>
+<text x="1324" y="803" font-size="24" fill="#FBBF24">ERROR</text>
+<text x="1324" y="843" font-size="21" fill="#F1F5F9">Verification</text>
+<text x="1324" y="873" font-size="21" fill="#F1F5F9">failure: do not</text>
+<text x="1324" y="903" font-size="21" fill="#F1F5F9">show trusted</text>
+<text x="1324" y="933" font-size="21" fill="#F1F5F9">replay.</text>
+<text x="48" y="1035" font-size="21" fill="#B8C5D6">Synthetic data • Read-only analysis • Human-reviewed simulations • No external actions</text>
+<text x="48" y="1071" font-size="20" fill="#FBBF24">Implemented backend ≠ implemented frontend | Reference date: 2026-09-30</text>
+</g>
+</svg>
