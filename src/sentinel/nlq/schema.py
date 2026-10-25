@@ -36,6 +36,8 @@ SCHEMA = {
         "reorder_point": "INTEGER",
         "avg_daily_demand": "DOUBLE",
         "history_days": "BIGINT",
+        "excluded_demand_count": "BIGINT",
+        "demand_source_ids": "VARCHAR",
         "days_of_cover": "DOUBLE",
         "inventory_age_days": "BIGINT",
     }

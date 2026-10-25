@@ -81,6 +81,7 @@ def guard_sql(sql, parameters=None, row_limit=ROW_LIMIT):
         )
         aliases = {t.alias_or_name: t.name.lower() for t in qualified.find_all(exp.Table)}
         allowed_pairs = {frozenset((join["left"], join["right"])) for join in JOINS}
+        connected = {qualified.args["from_"].this.alias_or_name}
         for join in qualified.find_all(exp.Join):
             condition = join.args.get("on")
             if not isinstance(condition, exp.EQ) or not all(
@@ -89,6 +90,15 @@ def guard_sql(sql, parameters=None, row_limit=ROW_LIMIT):
                 raise SQLBlocked(
                     "Joins must use a documented equality key; cross joins are blocked."
                 )
+            introduced = join.this.alias_or_name
+            sides = {condition.left.table, condition.right.table}
+            if (
+                introduced not in sides
+                or not (sides - {introduced}) <= connected
+                or len(sides) != 2
+            ):
+                raise SQLBlocked("Each join must connect its new table to a preceding table.")
+            connected.add(introduced)
             pair = frozenset(
                 f"{aliases.get(c.table)}.{c.name}" for c in (condition.left, condition.right)
             )

@@ -66,6 +66,10 @@ def supplier_lateness(plan, text):
 
 
 def stockout_risk(plan, text):
+    if (
+        re.search(r"\bunlikely\b", text) and not re.search(r"\bunlikely to cover\b", text)
+    ) or re.search(r"\b(lasts|exactly|equal)\b", text):
+        raise Clarify("unsupported_modifier", "horizon_days")
     if re.search(r"\b(more|above|greater|at least)\b|\b(last|past|previous) \d+ days?\b", text):
         raise Clarify("unsupported_modifier", "horizon_days")
     try:
@@ -88,6 +92,10 @@ def supplier_evidence(plan, text):
 
 
 def demand_what_if(plan, text):
+    if re.search(
+        r"\b(?:to\s+\d+(?:\.\d+)?\s*(?:%|percent)|by\s+(?:\d+(?:\.\d+)?\s+times|twice))", text
+    ):
+        raise Clarify("missing_scenario", "scenario.demand_increase")
     if not re.search(
         r"\b(up|increase|increases|higher|rising|rises|uplift|additional|twice|times|raise|grows|more)\b",
         text,

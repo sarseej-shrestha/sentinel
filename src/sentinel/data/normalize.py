@@ -1,5 +1,6 @@
 """Normalize only independently generated synthetic entities; flag bad records."""
 
+import numpy as np
 import pandas as pd
 
 from sentinel.config import AS_OF
@@ -33,6 +34,59 @@ def flag_quality(frames, as_of=AS_OF):
         frame.loc[mask, "data_quality_flag"] = frame.loc[mask, "data_quality_flag"].map(
             lambda v: reason if v == "ok" else v + ";" + reason
         )
+
+    # Gross demand is consumption, not an adjustment ledger. Negative values are invalid.
+    from sentinel.data.build_duckdb import TABLES
+
+    references = {
+        "supplier_id": ("suppliers", "supplier_id"),
+        "product_id": ("products", "product_id"),
+        "warehouse_id": ("warehouses", "warehouse_id"),
+        "order_id": ("orders", "order_id"),
+    }
+    observations = {
+        "inventory_date",
+        "demand_date",
+        "event_date",
+        "delivered_date",
+        "shipped_date",
+        "order_date",
+    }
+    for table, frame in frames.items():
+        if frame.empty:
+            continue
+        primary = next(iter(TABLES[table]))
+        flag(table, frame.duplicated(primary, keep=False), "duplicate_record")
+        for field, kind in TABLES[table].items():
+            if kind in {"INTEGER", "DOUBLE"}:
+                values = pd.to_numeric(frame[field], errors="coerce")
+                invalid = ~np.isfinite(values) | (values < 0)
+                if kind == "INTEGER":
+                    invalid |= values.mod(1).ne(0)
+                if field in {"traffic_index", "discount_fraction"}:
+                    invalid |= values > 1
+                flag(table, invalid, "invalid_" + field)
+                frame.loc[~np.isfinite(values), field] = None
+            if kind == "DATE":
+                parsed = pd.to_datetime(frame[field], errors="coerce")
+                flag(table, parsed.isna(), "invalid_" + field)
+                if field in observations:
+                    flag(table, parsed > pd.Timestamp(as_of), "future_" + field)
+                frame[field] = parsed.dt.date
+            if field in references and table != references[field][0]:
+                target, key = references[field]
+                flag(
+                    table,
+                    ~frame[field].isin(frames[target][key]),
+                    "unknown_" + field.removesuffix("_id"),
+                )
+        if table in {"inventory_daily", "demand_daily"}:
+            day = "inventory_date" if table == "inventory_daily" else "demand_date"
+            flag(
+                table,
+                frame.duplicated(["product_id", "warehouse_id", day], keep=False),
+                "duplicate_daily_observation",
+            )
 
     suppliers = set(frames["suppliers"]["supplier_id"])
     products = set(frames["products"]["product_id"])

@@ -1,5 +1,7 @@
 # Sentinel
 
+Completion baseline (2026-10-25, `2ccf8b1`): all 661 tests passed in 74.69 seconds, without skips. Repository lint/format failed only in the technical-spike notebook; dependency consistency passed. Completion work preserves frozen benchmarks and uses a separate application database.
+
 Sentinel is a human-approved, read-only supply-chain operations console for CMPS 4200 HCI. The demo uses independently generated synthetic data. It supports bounded natural-language SQL questions, operational risk review, demand forecasts and what-if analysis, evidence-backed recommendations, simulated human decisions, and audit replay.
 
 ## Verified planner authority

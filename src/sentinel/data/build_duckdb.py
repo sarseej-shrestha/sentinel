@@ -122,7 +122,7 @@ VIEWS = {
  s.missing_field_count, s.record_timestamp
  FROM suppliers s LEFT JOIN shipment_view sh USING(supplier_id)
  LEFT JOIN (SELECT supplier_id, count(*) AS recent_delay_events FROM supplier_events
- WHERE event_type = 'delay' AND event_date >= DATE '{as_of}' - INTERVAL 7 DAY
+ WHERE event_type = 'delay' AND event_date > DATE '{as_of}' - INTERVAL 7 DAY
  AND event_date <= DATE '{as_of}' GROUP BY supplier_id) e USING(supplier_id)
  GROUP BY ALL
 """,
@@ -133,15 +133,22 @@ VIEWS = {
 """,
     "risk_view": """
  WITH recent_demand AS (
- SELECT product_id, warehouse_id, avg(units) AS avg_daily_demand, count(*) AS history_days
+ SELECT product_id, warehouse_id, avg(CASE WHEN data_quality_flag = 'ok' THEN units END) AS avg_daily_demand,
+ count(DISTINCT demand_date) AS history_days,
+ count(*) FILTER (WHERE data_quality_flag <> 'ok') AS excluded_demand_count,
+ string_agg(source_record_id, '|' ORDER BY demand_date, source_record_id) AS demand_source_ids
  FROM demand_daily WHERE demand_date > DATE '{as_of}' - INTERVAL 28 DAY AND demand_date <= DATE '{as_of}'
  GROUP BY product_id, warehouse_id), latest AS (
  SELECT *, row_number() OVER (PARTITION BY product_id, warehouse_id ORDER BY inventory_date DESC) AS rn FROM inventory_daily)
  SELECT i.product_id, p.product_name, i.warehouse_id, w.warehouse_name, p.supplier_id,
  i.inventory_date, i.on_hand, i.reorder_point, d.avg_daily_demand, d.history_days,
+ coalesce(d.excluded_demand_count, 0) AS excluded_demand_count, d.demand_source_ids,
  i.on_hand / nullif(d.avg_daily_demand, 0) AS days_of_cover,
  date_diff('day', i.inventory_date, DATE '{as_of}') AS inventory_age_days,
- i.source_dataset, i.source_record_id, i.synthetic_entity_id, i.data_quality_flag, i.missing_field_count, i.record_timestamp
+ i.source_dataset, i.source_record_id, i.synthetic_entity_id,
+ CASE WHEN coalesce(d.history_days, 0) <> 28 OR coalesce(d.excluded_demand_count, 0) > 0
+ THEN i.data_quality_flag || ';incomplete_or_invalid_demand' ELSE i.data_quality_flag END AS data_quality_flag,
+ i.missing_field_count, i.record_timestamp
  FROM latest i LEFT JOIN products p USING(product_id) LEFT JOIN warehouses w USING(warehouse_id)
  LEFT JOIN recent_demand d USING(product_id, warehouse_id) WHERE i.rn = 1
 """,

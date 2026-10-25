@@ -285,7 +285,7 @@ def compile_query_plan(value):
         return plan(intent, abstain=True, needs_clarification=intent == "unsupported")
     if intent == "supplier_delay":
         view = "shipment_view"
-        sql = "SELECT supplier_id, supplier_name, count(is_late) AS evaluable_shipments, sum(CASE WHEN is_late THEN 1 ELSE 0 END) AS late_shipments, avg(CASE WHEN is_late THEN 1.0 WHEN is_late = false THEN 0.0 END) AS late_delivery_rate FROM shipment_view WHERE promised_date >= $start_date AND promised_date < $end_date GROUP BY supplier_id, supplier_name HAVING count(is_late) > 0 ORDER BY late_delivery_rate DESC"
+        sql = "SELECT supplier_id, supplier_name, count(*) AS included_shipments, count(*) - count(is_late) AS excluded_shipments, count(is_late) AS evaluable_shipments, sum(CASE WHEN is_late THEN 1 ELSE 0 END) AS late_shipments, avg(CASE WHEN is_late THEN 1.0 WHEN is_late = false THEN 0.0 END) AS late_delivery_rate FROM shipment_view WHERE promised_date >= $start_date AND promised_date < $end_date GROUP BY supplier_id, supplier_name HAVING count(is_late) > 0 ORDER BY late_delivery_rate DESC"
         params = {
             "start_date": value["time_range"]["start"],
             "end_date": value["time_range"]["end"],

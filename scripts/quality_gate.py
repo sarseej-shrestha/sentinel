@@ -14,6 +14,8 @@ def check():
     email = git("config", "user.email").decode().strip()
     identity = git("var", "GIT_AUTHOR_IDENT").decode()
     assert identity.startswith(f"Sarseej Shrestha <{email}>")
+    committer = git("var", "GIT_COMMITTER_IDENT").decode()
+    assert committer.startswith(f"Sarseej Shrestha <{email}>")
     assert email, "An existing configured email is required"
     forbidden = (
         "data/raw/",
@@ -34,6 +36,7 @@ def check():
         assert Path(name).suffix.lower() != ".md" or name in {
             "README.md",
             "docs/technical_spike.md",
+            "phase2/README.md",
         }, name
         blob = git("show", f":{name}")
         assert len(blob) < 2_000_000, f"Review large file: {name}"
