@@ -113,6 +113,7 @@ VIEWS = {
 """,
     "supplier_view": """
  SELECT s.supplier_id, s.supplier_name, s.lead_time_days,
+ string_agg(sh.source_record_id, '|' ORDER BY sh.shipment_id) AS shipment_source_ids,
  count(sh.shipment_id) AS shipment_count, count(sh.is_late) AS evaluable_shipments,
  count(sh.shipment_id)-count(sh.is_late) AS missing_or_invalid_shipments,
  avg(CASE WHEN sh.is_late THEN 1.0 WHEN sh.is_late = false THEN 0.0 END) AS late_delivery_rate,

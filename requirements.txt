@@ -9,3 +9,7 @@ requests==2.34.2
 pytest==9.1.1
 nbformat==5.11.1
 openpyxl==3.1.5
+fastapi==0.162.0
+pydantic==2.14.1
+uvicorn==0.54.0
+httpx==0.28.1

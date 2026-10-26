@@ -56,6 +56,7 @@ def guard_sql(sql, parameters=None, row_limit=ROW_LIMIT):
                 )
         allowed_functions = {
             "SUM",
+            "GROUP_CONCAT",
             "AVG",
             "COUNT",
             "MIN",

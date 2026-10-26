@@ -11,6 +11,7 @@ SCHEMA = {
     | PROVENANCE
     | {
         "shipment_count": "BIGINT",
+        "shipment_source_ids": "VARCHAR",
         "evaluable_shipments": "BIGINT",
         "missing_or_invalid_shipments": "BIGINT",
         "late_delivery_rate": "DOUBLE",

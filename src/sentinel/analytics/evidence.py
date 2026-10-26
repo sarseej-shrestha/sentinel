@@ -39,7 +39,7 @@ def verified(result):
     return result
 
 
-def recommendation(result, risk=None, forecast_output=None):
+def recommendation(result, risk=None, forecast_output=None, *, compact=False):
     result = verified(result)
     missing, assumptions, sources = (
         [],
@@ -73,7 +73,7 @@ def recommendation(result, risk=None, forecast_output=None):
             "late_delivery": "Review the shipment delay drivers and simulate a contingency note.",
             "supplier_reliability": "Review supplier delivery evidence and simulate a follow-up note.",
         }[risk["risk_type"]]
-    return {
+    output = {
         "recommendation": text,
         "evidence_id": result.evidence_id,
         "evidence_rows": result.rows,
@@ -85,3 +85,12 @@ def recommendation(result, risk=None, forecast_output=None):
         "suggested_human_review": True,
         "simulated_action_only": True,
     }
+
+    if compact:
+        output.pop("evidence_rows")
+        output.pop("verified_sql")
+        output.pop("parameters")
+        output["target_indices"] = [
+            i for i, row in enumerate(result.rows) if not risk or row in risk["evidence_rows"]
+        ]
+    return output

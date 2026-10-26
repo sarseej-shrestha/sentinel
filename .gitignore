@@ -23,3 +23,12 @@ models/
 *.pt
 *.zip
 PUSH_STATUS.txt
+
+node_modules/
+frontend/dist/
+playwright-report/
+test-results/
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
