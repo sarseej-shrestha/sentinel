@@ -1,6 +1,6 @@
 # CMPS 4200 Phase 2 design artifacts
 
-These editable SVGs are proposed information architecture, user flows and low-fidelity screens. **Implemented backend ≠ implemented frontend.** No graphical frontend, interviews, personas or usability findings are claimed.
+These editable SVGs preserve the Phase 2 proposed information architecture, user flows and low-fidelity screens. The completion branch now implements the five-workflow React/FastAPI workspace; see the root README for launch and verification. The SVGs remain historical designs, not screenshots. Interviews, genuine personas and human usability findings are still not claimed.
 
 ## Artifact index
 
@@ -20,7 +20,7 @@ All visual screens say **PROPOSED UI — not an implemented screen**. Flow roles
 
 The deterministic planner is the sole authoritative answer path. Qwen and BGE are optional deferred local diagnostics; normal requests do not load them. Model proposals never compile SQL, change evidence, approve actions or alter replay. Business queries are read-only; trusted application code separately appends audit records. No external operational action occurs.
 
-Refine/run-again controls represent new requests, not creative answer regeneration. **Revert draft** is proposed frontend behavior for unsaved text before approval, not an implemented backend rollback. Saved edits retain their audit history and require a separate decision. Final approved or rejected simulated decisions cannot be undone.
+Refine/run-again controls represent new requests, not creative answer regeneration. **Revert draft** now discards unsaved frontend text before approval; it is not a backend rollback. Saved edits retain their audit history and require a separate decision. Final approved or rejected simulated decisions cannot be undone.
 
 Timeout, unavailable service, malformed/empty model output, unsafe input and invalid evidence have explicit recovery states. Unsupported or inappropriate wording is rejected in favor of closed verified templates; this is not a completed bias/fairness evaluation. Hosted rate-limit behavior and cost are **NOT MEASURED**. No rate-limit retry feature is claimed.
 
@@ -30,4 +30,4 @@ Source baseline: commit `80525c4d502786896de6c4c526f3f0c6a09464a2`; see the root
 
 SVGs use a 1600 × 1100 viewBox, navy/cyan/amber styling, embedded text and vector shapes with no external assets. Insert as vectors and preserve aspect ratio; crop deliberately or split state detail into progressive reveals rather than shrinking labels. Use installed Arial/Helvetica-compatible fonts. Screen designs are not accessibility-certified; contrast, keyboard behavior and usability need review. The forecast plot is a labeled chart placeholder, not fabricated time-series values.
 
-No backend or frozen benchmark files are changed. No PPTX is included. Speaker assignments, genuine persona mapping, usability testing, external evaluation and frontend implementation remain unfinished.
+No backend or frozen benchmark files are changed. No PPTX is included. Speaker assignments, genuine persona mapping, human usability testing and external evaluation remain unfinished. Frontend implementation and automated browser/accessibility checks are recorded in the root README.

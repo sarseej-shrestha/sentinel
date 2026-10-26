@@ -132,9 +132,11 @@ small,
   background: var(--cyan);
   color: #082b2b;
   padding: 14px;
+  clip-path: inset(50%);
 }
 .skip-link:focus {
   top: 10px;
+  clip-path: none;
 }
 .app-shell {
   display: flex;
@@ -648,6 +650,9 @@ td {
   max-width: 450px;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+}
+td:first-child {
+  min-width: 90px;
 }
 tbody tr:nth-child(even) {
   background: #17283a;

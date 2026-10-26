@@ -1,5 +1,107 @@
 # Sentinel
 
+Local, single-user supply-chain analysis for **SIGSEGV · CMPS 4200 HCI**, owned by **Sarseej Shrestha**. The v1 workspace implements five browser-to-decision workflows using synthetic data referenced to **2026-09-30**. That is the dataset reference date, not today's date. All decisions are simulations.
+
+## Run the application
+
+Tested on an Apple M4 Max with 36 GiB RAM, macOS arm64, Python **3.14.3**, Node **23.10.0**, npm **11.4.2**. Direct dependencies and the tested core dependency graph are pinned; optional Qwen/BGE packages are not required. Other platforms and Python/Node versions have not been release-verified.
+
+From this checkout:
+
+```sh
+python3.14 -m venv .venv
+.venv/bin/python -m pip install -r requirements-lock.txt
+.venv/bin/python -m pip install -e . --no-deps
+npm --prefix frontend ci
+npm --prefix frontend run build
+.venv/bin/python -m sentinel.web --init
+```
+
+Open **http://127.0.0.1:8765**. FastAPI serves the compiled React assets; no separate production Node server is needed. `--init` creates missing synthetic data in `data/processed/v1/` and never replaces an existing database. Subsequent launches use `.venv/bin/python -m sentinel.web`. Use `--data-dir PATH --port 8765` for a separate local workspace. Do not point the legacy CLI at the product's analytics database.
+
+## Supported tasks
+
+| Task | Editable inputs | Output |
+| --- | --- | --- |
+| Supplier late deliveries | Inclusive start/end dates; optional supplier | Evaluable/late/excluded shipment counts, lateness fraction and source lineage |
+| Inventory coverage | Coverage threshold across all product/warehouse positions | Stock units, historical daily demand, days of cover and review reasons |
+| Demand forecast | Product and warehouse | Recursive 14-day point forecast, seasonal-naïve comparison, chart and data table |
+| Supplier investigation | Supplier | Observed delivery metrics, delay context, review rules and evidence |
+| Demand-increase simulation | Warehouse and percentage increase **by** | Baseline/scenario demand and coverage; unchanged inventory |
+
+Forms are the ordinary input route. Edit fields to revise the interpretation before running. Broad natural-language understanding is deliberately excluded from the browser: the exposed frozen holdout still supports only 15/30 positive cases correctly. Existing bounded-language CLI and diagnostic scripts remain for research.
+
+Every task has initial, loading, success, uncertain and error handling, plus a distinct empty-result state. Evidence is paginated and inspectable. Select a recommendation explicitly, enter reviewer attribution, save a pending draft, edit it, then confirm simulated approval or rejection. Final decisions cannot be edited or undone. **Revert draft** only discards unsaved text. Decision history opens verified saved snapshots; replay does not recompute an analysis.
+
+## Architecture and trust boundaries
+
+```text
+React task form / editable interpretation
+  → strict shared Task contract (FastAPI/Pydantic)
+  → deterministic intent/entity/date registries
+  → SQL-free validated QueryPlan (must match selected task)
+  → parameterized allowlisted compiler + SQL AST guard
+  → independent read-only DuckDB worker
+  → verified evidence + risk / recursive forecast / arithmetic scenario
+  → SQLite evidence reference + compact result snapshot
+  → explicit recommendation selection → pending draft
+  → transactional revision/evidence check → simulated approve/reject
+  → hash-linked event + request-bound retry receipt → snapshot replay
+
+Qwen/BGE → optional separate diagnostics only; no execution or approval authority
+```
+
+Business logic remains in `src/sentinel/`; `tasks.py`, `application.py`, `api.py`, `state.py` and `web.py` form the product layer. React lives in `frontend/`. Analytics use the existing DuckDB schema, compiler, guard, evidence verifier and models. Normal requests neither load local language/embedding models nor call hosted services.
+
+SQLite uses short explicit transactions, FULL synchronization and DELETE rollback journaling. Proposal transition, audit append and idempotency receipt commit together. Identical retries return their original result; conflicting keys, stale revisions and terminal edits fail. History reads one consistent committed snapshot. Evidence packs are stored once, with dataset/query/configuration identity, source rows and row hashes; recommendations reference their target rows.
+
+Reviewer names are attribution, **not authentication**. Local hashes detect inconsistent snapshots; they do not prove independent authenticity or prevent someone with full filesystem access from rewriting an entire history. This is a loopback-only prototype, not a multi-user or production service. Synthetic classifier outputs are not validated operational probabilities. Unvalidated forecast bands are omitted; point predictions are not promises.
+
+## Verify and reproduce measurements
+
+```sh
+.venv/bin/python -m scripts.check_release
+npm --prefix frontend run test:e2e
+.venv/bin/python -m scripts.evaluate_release --repeats 30
+.venv/bin/python scripts/quality_gate.py
+```
+
+Browser tests require Chromium already installed by Playwright, or `CHROMIUM_PATH` pointing to a compatible Chrome binary. This host used its existing cached Chromium. For a new development machine, `cd frontend && npx playwright install chromium` installs the browser only. The suite creates disposable analytics/state databases and runs the actual backend on port 8766. The benchmark uses port 8777, records successful HTTP timings separately from controlled failures, evaluates every eligible series and writes only ignored `artifacts/v1-release/release.json`. Keep those ports free. The quality gate checks the staged snapshot and existing author/committer identity; the release runner checks the working repository.
+
+Baseline at `2ccf8b1`: **661 passed, no skips, 74.69 s**; notebook lint/format failed and was repaired. Latest complete run: **707 passed, no skips, 82.21 s**; **14 browser tests passed in 49.2 s**. Python lint/format, dependency consistency, compilation, frontend type/lint/format/build and diff checks passed. Warnings remain: Starlette deprecates its httpx-backed test client; restricted macOS core detection sometimes falls back to logical cores. Browser recovery tests clearly label injected states; these are not model successes or user-study evidence.
+
+30 successful warm requests per task measured p95 of **345 ms late deliveries, 309 ms coverage, 362 ms forecast, 294 ms supplier investigation and 298 ms what-if**. Server startup to readiness was **1.17 s** including initial dataset creation. Sampled server RSS reached **354 MiB**, excluding transient worker peaks. The 180-row shipment response was **129,846 bytes**, down from the historical approximately 18 MB duplicated-evidence response. Detailed evidence remains available separately.
+
+The actual recursive forecast path across all 18 series scored final-block **MAE 2.602 / RMSE 3.242**, against baseline **3.206 / 3.966** (252 predictions). P2/W3 performed worse than its baseline; horizon 3 also performed worse in aggregate. These are internally authored, previously exposed synthetic data, not independent validation. See [technical spike and per-series results](docs/technical_spike.md).
+
+Frozen benchmarks/checksums were preserved. Whole-plan correctness remains **32/48**, supported positives **15/30**, accepted-answer correctness **15/15**, explicit clarification **7/48**, safe negatives **18/18** and exact negative classification **17/18**. These denominators describe different properties; accepted-answer correctness does not imply broad coverage.
+
+## Five-minute demonstration
+
+1. **0:00–0:45:** Point out synthetic data and its reference date. Run late deliveries for August 2026; inspect evaluable counts, exclusions and source evidence.
+2. **0:45–1:30:** Run inventory coverage below 14 days. Compare units, daily demand and coverage. Change the threshold to 1 to demonstrate a genuine empty result, then restore 14.
+3. **1:30–2:15:** Forecast P1/W3. Compare point predictions and seasonal baseline; expand the table. Explain why uncertainty bands are omitted.
+4. **2:15–3:00:** Investigate Supplier A, inspect observed metrics and review rules. Then run Warehouse 3 with a 15% demand increase and compare coverage.
+5. **3:00–4:15:** Select one recommendation, enter reviewer attribution, save and edit a draft. Show Revert draft, then explicitly approve or reject the simulation.
+6. **4:15–5:00:** Open Decision history and replay the saved snapshot. Show the final decision is immutable. Explain that no orders, suppliers or stock were changed.
+
+## Persistence, legacy data and recovery
+
+Keep the entire workspace directory private and out of Git. For a backup, stop the service first and copy `analytics.duckdb` and `state.sqlite3` together. Never copy an actively written SQLite file without SQLite's backup API. The tests exercise transactional rollback, concurrent conflicting decisions, restart/retry, corrupted copies and restoration from verified backups.
+
+To preserve a legacy audit, use `--import-legacy /path/to/legacy.duckdb` when launching the new workspace. It reads and verifies the original chain, stores its events unchanged in SQLite and exposes the imported snapshot in history. It does not convert historical hashes or turn old decisions into editable v1 drafts. Preserve the original file. Corrupt audit/evidence fails closed; stop, preserve the damaged files for inspection, restore a verified backup into a **new** directory, then launch with `--data-dir`. No automatic hash rewriting or silent repair occurs.
+
+## Deliberate limits and course work outstanding
+
+No public hosting, multi-user authorization, arbitrary uploads, real purchasing, autonomous actions, new fine-tuning or hosted inference. No calibrated coverage claim, broad language claim, production-readiness claim or independent-validation claim. Very large histories may increase verification time; the release budgets were measured on a local demo-sized workspace.
+
+Genuine interviews/personas, human usability and assistive-technology sessions, independent evaluation, final rubric confirmation and team contribution/speaker evidence remain human-dependent requirements. Automated axe checks and keyboard/focus assertions passed; they do not replace a manual accessibility audit. The [Phase 2 SVGs](phase2/README.md) remain historical design artifacts; their “proposed” labels describe that milestone, not the now-implemented workspace. No new slides were created.
+
+<details>
+<summary>Historical implementation and evaluation provenance (earlier milestones; not current setup instructions)</summary>
+
+## Earlier milestone record
+
 Completion baseline (2026-10-25, `2ccf8b1`): all 661 tests passed in 74.69 seconds, without skips. Repository lint/format failed only in the technical-spike notebook; dependency consistency passed. Completion work preserves frozen benchmarks and uses a separate application database.
 
 Sentinel is a human-approved, read-only supply-chain operations console for CMPS 4200 HCI. The demo uses independently generated synthetic data. It supports bounded natural-language SQL questions, operational risk review, demand forecasts and what-if analysis, evidence-backed recommendations, simulated human decisions, and audit replay.
@@ -383,3 +485,5 @@ Raw downloads, local profiles, databases, training JSONL, model weights/adapters
 - Repeated spike inputs are smoke tests. Timings include process startup and depend on hardware, interpreter and imports. Sparse history, invalid dates, stale stock and missing fields require review.
 
 Next model work: preserve deterministic authority and obtain independent evaluation before proposing any training. Preserve frozen sets; use development data for iteration. A future adapter cannot become a correctness dependency through this runtime. Forecast interval coverage remains a limitation. Presentation and visual-design work remain a separate phase.
+
+</details>
