@@ -132,6 +132,17 @@ class StateStore:
         with self._connection() as con:
             return self._events(con)
 
+    def history_snapshot(self):
+        # Pin the audit and action reads to one committed SQLite snapshot.
+        with self._connection() as con:
+            con.execute("BEGIN")
+            events = self._events(con)
+            actions = [
+                self._action(con, row[0])
+                for row in con.execute("SELECT id FROM actions ORDER BY rowid DESC").fetchall()
+            ]
+            return {"verified": True, **verify_events(events), "events": events, "actions": actions}
+
     def _pack(self, con, evidence_id):
         row = con.execute("SELECT body FROM evidence WHERE id=?", [evidence_id]).fetchone()
         if not row:

@@ -188,3 +188,107 @@ test("late responses cannot replace a newer task; loading is announced", async (
     page.getByText("A clear path from question to decision"),
   ).toBeVisible();
 });
+
+for (const [nav] of workflows) {
+  test(`${nav}: initial, loading, controlled uncertainty and error recovery`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: nav, exact: false }).first().click();
+    await expect(
+      page.getByText("A clear path from question to decision"),
+    ).toBeVisible();
+    // Inject response states to exercise recovery UI; these are not model outcomes.
+    await page.route(
+      "**/api/analyses",
+      async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const response = await route.fetch();
+        const body = await response.json();
+        await route.fulfill({
+          response,
+          json: {
+            ...body,
+            state: "uncertain",
+            message: "Injected incomplete evidence",
+            recommendations: [],
+          },
+        });
+      },
+      { times: 1 },
+    );
+    await page
+      .getByRole("button", { name: "Run analysis", exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        "Checking the request, running read-only analysis and saving evidence…",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Review the available information" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Save pending draft" }),
+    ).toHaveCount(0);
+    await page.route(
+      "**/api/analyses",
+      (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Injected storage failure" }),
+        }),
+      { times: 1 },
+    );
+    await page
+      .getByRole("button", { name: "Run analysis", exact: true })
+      .click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Injected storage failure",
+    );
+    await page
+      .getByRole("button", { name: "Run analysis", exact: true })
+      .click();
+    await expect(
+      page.getByLabel("Recommendation", { exact: true }),
+    ).toBeVisible();
+  });
+}
+
+test("failed save preserves a draft, retry succeeds and rejection is final", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Run analysis", exact: true }).click();
+  await page.getByLabel("Recommendation", { exact: true }).selectOption("r1");
+  await page.getByLabel("Reviewer name").fill("Browser recovery reviewer");
+  await page
+    .getByLabel("Review note")
+    .fill("Preserve this note after a failed save.");
+  await page.route(
+    "**/api/proposals",
+    (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Injected failed save" }),
+      }),
+    { times: 1 },
+  );
+  await page.getByRole("button", { name: "Save pending draft" }).click();
+  await expect(page.getByRole("alert")).toContainText("Injected failed save");
+  await expect(page.getByLabel("Review note")).toHaveValue(
+    "Preserve this note after a failed save.",
+  );
+  await page.getByRole("button", { name: "Save pending draft" }).click();
+  await expect(page.getByText("Pending · revision 1")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Reject simulation", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Confirm rejection" }).click();
+  await expect(page.getByLabel("Review note")).toBeDisabled();
+  await expect(page.getByText(/This decision is final/)).toContainText(
+    "rejected",
+  );
+});

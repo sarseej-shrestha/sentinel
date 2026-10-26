@@ -138,3 +138,40 @@ def test_pack_rejects_forged_source():
             "d",
             "2026-09-30",
         )
+
+
+def test_history_pins_one_committed_snapshot(tmp_path, monkeypatch):
+    store = seeded(tmp_path)
+    store.propose("p", "a1", "r1", "Sam", "Review")
+    original = store._action
+
+    def read(con, action_id):
+        assert con.in_transaction
+        return original(con, action_id)
+
+    monkeypatch.setattr(store, "_action", read)
+    snapshot = store.history_snapshot()
+    assert snapshot["event_count"] == 2
+    assert snapshot["events"][-1]["payload"]["action"] == snapshot["actions"][0]
+
+
+def test_corrupted_copy_recovery_preserves_original_and_pending_draft(tmp_path):
+    import shutil
+
+    store = seeded(tmp_path)
+    action = store.propose("p", "a1", "r1", "Sam", "Keep pending")
+    backup = tmp_path / "verified-backup.sqlite3"
+    with sqlite3.connect(store.path) as source, sqlite3.connect(backup) as destination:
+        source.backup(destination)
+    damaged = tmp_path / "damaged.sqlite3"
+    shutil.copy2(backup, damaged)
+    with sqlite3.connect(damaged) as con:
+        con.execute("UPDATE events SET body='{}' WHERE seq=1")
+    damaged_hash = hashlib.sha256(damaged.read_bytes()).hexdigest()
+    with pytest.raises(IntegrityFailure):
+        StateStore(damaged).verify()
+    restored = tmp_path / "restored.sqlite3"
+    shutil.copy2(backup, restored)
+    assert StateStore(restored).history_snapshot()["actions"] == [action]
+    assert hashlib.sha256(damaged.read_bytes()).hexdigest() == damaged_hash
+    assert store.actions() == [action]

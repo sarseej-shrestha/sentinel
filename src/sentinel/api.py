@@ -224,16 +224,7 @@ def create_app(database, state, static_dir=None):
 
     @app.get("/api/history", response_model=History)
     def history():
-        # A read transaction would offer a point-in-time listing; each snapshot is independently verified.
-        events = service.store.history()
-        from sentinel.audit.logger import verify_events
-
-        return {
-            "verified": True,
-            **verify_events(events),
-            "events": events,
-            "actions": service.store.actions(),
-        }
+        return service.store.history_snapshot()
 
     @app.get("/api/legacy/{identity}", response_model=list[dict[str, JsonValue]])
     def legacy(identity: str):
