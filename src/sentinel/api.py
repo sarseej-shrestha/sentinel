@@ -53,6 +53,9 @@ class Analysis(StrictModel):
     recommendations: list[Recommendation]
     forecast: Forecast | None
     elapsed_ms: float
+    forecast_context: dict[str, JsonValue] | None = None
+    quality: dict[str, JsonValue] | None = None
+    targets: list[dict[str, JsonValue]] = []
 
 
 class ProposalRequest(StrictModel):
@@ -87,6 +90,8 @@ class Action(StrictModel):
 
 class History(StrictModel):
     verified: bool
+    chain_verified: bool = True
+    projections_verified: bool = True
     event_count: int
     head_hash: str
     events: list[dict[str, JsonValue]]
@@ -96,6 +101,7 @@ class History(StrictModel):
 class Evidence(StrictModel):
     id: str
     snapshot_id: str
+    source_id: str | None = None
     sql: str
     parameters: dict[str, JsonValue]
     rows: list[dict[str, JsonValue]]

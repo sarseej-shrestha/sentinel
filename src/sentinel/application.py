@@ -1,5 +1,6 @@
 """Product orchestration over the existing deterministic analysis boundary."""
 
+import copy
 import hashlib
 import json
 import time
@@ -9,9 +10,11 @@ from pathlib import Path
 
 import duckdb
 
+from sentinel.analytics.forecast import current_forecast_context
 from sentinel.config import AS_OF
 from sentinel.console import Console
-from sentinel.nlq.service import ask
+from sentinel.investigation import capture, target_id
+from sentinel.nlq.service import ask, execute_plan
 from sentinel.state import StateStore, make_pack
 from sentinel.tasks import Task
 
@@ -29,7 +32,7 @@ class Application:
         self.console = Console(self.database)
 
     def analyze(self, task: Task):
-        # Guided fields are checked against the same natural-language authority.
+        task = Task.model_validate(task.model_dump())
         return self.analyze_question(task.question(), task)
 
     def analyze_question(self, question, task=None, *, query_timeout=3.0):
@@ -38,15 +41,68 @@ class Application:
             raise ValueError(
                 "The dataset changed. Restart with a verified dataset; saved evidence remains available."
             )
-        record = ask(self.database, question, query_timeout=query_timeout)
-        if task is not None and record["query_plan"] != task.plan():
-            raise ValueError(
-                "The interpretation differs from the selected task; no result was accepted"
-            )
+        record = (
+            execute_plan(self.database, task.plan(), question, query_timeout)
+            if task is not None
+            else ask(self.database, question, query_timeout=query_timeout)
+        )
         pack = None
         query = record.get("query_result")
-        if query and query["rows"] and query["evidence_id"]:
-            pack = make_pack(query, self.dataset_fingerprint, AS_OF)
+        source = None
+        if query and query.get("evidence_id"):
+            source = capture(self.database, record["query_plan"])
+            if hashlib.sha256(self.database.read_bytes()).hexdigest() != self.dataset_fingerprint:
+                raise ValueError("Dataset changed while capturing evidence; no analysis was saved")
+            pack = make_pack(query, self.dataset_fingerprint, AS_OF, source)
+            if source and record["query_plan"]["intent"] != "forecast":
+                valid = {t["id"] for t in source["targets"] if t["assessed"] and t["matching"]}
+                rows = [
+                    r
+                    for r in query["rows"]
+                    if target_id(record["query_plan"]["intent"], r) in valid
+                    and r.get("data_quality_flag", "ok") == "ok"
+                ]
+                record = copy.deepcopy(record)
+                query = record["query_result"]
+                query["rows"] = rows
+                query["evidence_id"] = hashlib.sha256(
+                    json.dumps(
+                        {"sql": query["sql"], "parameters": query["parameters"], "rows": rows},
+                        sort_keys=True,
+                    ).encode()
+                ).hexdigest()
+                query["status"] = "ok" if rows else "empty"
+                record["status"] = (
+                    "ok"
+                    if rows
+                    else "missing_information"
+                    if source["quality"]["entities"]["unevaluable"]
+                    else "empty"
+                )
+                record["failure_behavior"] = (
+                    None
+                    if rows
+                    else "No evaluable matches. Inspect population quality and missing evidence."
+                    if record["status"] == "missing_information"
+                    else "No matching observations."
+                )
+        forecast_context = None
+        if record.get("query_plan", {}).get("intent") == "forecast" and query:
+            history = (
+                [r["record"] for r in source["records"] if r["kind"] == "demand"]
+                if source
+                else query["rows"]
+            )
+            forecast_context = current_forecast_context(history, AS_OF)
+            if forecast_context["freshness_status"] != "current":
+                record["status"] = "missing_information"
+                record["failure_behavior"] = (
+                    "Current forecast unavailable: "
+                    + forecast_context["freshness_status"].replace("_", " ")
+                    + ". Supply at least 56 consecutive valid daily observations through "
+                    + AS_OF
+                    + ". No dates were filled or shifted."
+                )
         error = record["failure_behavior"]
         if record["status"] == "ok":
             try:
@@ -81,8 +137,19 @@ class Application:
             "rows": [],
             "recommendations": [],
             "forecast": None,
+            "forecast_context": forecast_context,
+            "quality": source["quality"] if source else None,
+            "targets": source["targets"] if source else [],
             "elapsed_ms": 0.0,
         }
+        if source:
+            q = source["quality"]
+            if q["entities"]["unevaluable"] or any(
+                v["excluded"] or v["unassignable"] for v in q["observations"].values()
+            ):
+                result["warnings"].append(
+                    "This population includes unevaluable entities or excluded/unassignable records. Valid results are preserved; inspect population quality."
+                )
         if pack:
             if pack["excluded_count"]:
                 result["warnings"].append(
@@ -132,7 +199,10 @@ class Application:
                             "id": f"r{i + 1}",
                             "label": label,
                             "text": rec["recommendation"],
-                            "target_row_ids": [pack["row_ids"][j] for j in indices],
+                            "target_row_ids": [
+                                pack["row_ids"][pack["rows"].index(query["rows"][j])]
+                                for j in indices
+                            ],
                         }
                     )
             if "forecast" in record:
@@ -164,6 +234,6 @@ class Application:
                 )
         result["elapsed_ms"] = (time.perf_counter() - started) * 1000
         # Persist before returning success. Measurements around the HTTP request also include this commit and serialization.
-        self.store.save_analysis(result, pack)
+        self.store.save_analysis(result, pack, source)
         json.dumps(result, allow_nan=False)
         return result

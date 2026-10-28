@@ -28,8 +28,25 @@ def fingerprint(value):
     return hashlib.sha256(canonical_json(value).encode()).hexdigest()
 
 
-def make_pack(query, dataset_fingerprint, reference_date):
-    verify_snapshot(query["sql"], query["parameters"], query["rows"], query["evidence_id"])
+def verify_query(sql, parameters, rows, identity):
+    if rows:
+        verify_snapshot(sql, parameters, rows, identity)
+    elif (
+        not sql
+        or hashlib.sha256(
+            json.dumps(
+                {"sql": sql, "parameters": parameters, "rows": rows},
+                sort_keys=True,
+                allow_nan=False,
+            ).encode()
+        ).hexdigest()
+        != identity
+    ):
+        raise ValueError("Invalid empty query snapshot")
+
+
+def make_pack(query, dataset_fingerprint, reference_date, source=None):
+    verify_query(query["sql"], query["parameters"], query["rows"], query["evidence_id"])
     body = {
         "snapshot_id": query["evidence_id"],
         "sql": query["sql"],
@@ -56,6 +73,8 @@ def make_pack(query, dataset_fingerprint, reference_date):
             for row in query["rows"]
         ),
     }
+    if source is not None:
+        body["source_id"] = fingerprint(source)
     return {"id": fingerprint(body), **body}
 
 
@@ -69,6 +88,7 @@ class StateStore:
                 raise IntegrityFailure("Application state requires SQLite DELETE journaling")
             con.executescript("""
                 CREATE TABLE IF NOT EXISTS evidence(id TEXT PRIMARY KEY, body TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY, body TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS analyses(id TEXT PRIMARY KEY, body TEXT NOT NULL, hash TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS actions(id TEXT PRIMARY KEY, body TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY, body TEXT NOT NULL);
@@ -132,16 +152,43 @@ class StateStore:
         with self._connection() as con:
             return self._events(con)
 
+    def _projections(self, con, events):
+        try:
+            latest = {}
+            for event in events:
+                if event["event_type"].startswith("decision_"):
+                    action = event["payload"]["action"]
+                    latest[action["id"]] = action
+            rows = con.execute("SELECT id,body FROM actions ORDER BY rowid DESC").fetchall()
+            actual = {key: json.loads(body) for key, body in rows}
+            if actual != latest:
+                raise IntegrityFailure(
+                    "Decision projections are incomplete or differ from verified history. Preserve the database; no automatic repair was performed."
+                )
+            for evidence_id in {a["evidence_id"] for a in actual.values()}:
+                self._pack(con, evidence_id)
+            return [actual[key] for key, _ in rows]
+        except (KeyError, TypeError, ValueError) as exc:
+            if isinstance(exc, IntegrityFailure):
+                raise
+            raise IntegrityFailure("Decision projection verification failed") from exc
+
     def history_snapshot(self):
-        # Pin the audit and action reads to one committed SQLite snapshot.
         with self._connection() as con:
             con.execute("BEGIN")
             events = self._events(con)
-            actions = [
-                self._action(con, row[0])
-                for row in con.execute("SELECT id FROM actions ORDER BY rowid DESC").fetchall()
-            ]
-            return {"verified": True, **verify_events(events), "events": events, "actions": actions}
+            actions = self._projections(con, events)
+            return {
+                "verified": True,
+                "chain_verified": True,
+                "projections_verified": True,
+                **{
+                    "event_count": len(events),
+                    "head_hash": events[-1]["event_hash"] if events else GENESIS_HASH,
+                },
+                "events": events,
+                "actions": actions,
+            }
 
     def _pack(self, con, evidence_id):
         row = con.execute("SELECT body FROM evidence WHERE id=?", [evidence_id]).fetchone()
@@ -152,7 +199,9 @@ class StateStore:
             body = {k: v for k, v in pack.items() if k != "id"}
             if fingerprint(body) != evidence_id or pack["id"] != evidence_id:
                 raise ValueError("Evidence digest differs")
-            verify_snapshot(pack["sql"], pack["parameters"], pack["rows"], pack["snapshot_id"])
+            verify_query(pack["sql"], pack["parameters"], pack["rows"], pack["snapshot_id"])
+            if pack.get("source_id"):
+                self._source(con, pack["source_id"])
             return pack
         except (ValueError, KeyError, TypeError) as exc:
             raise IntegrityFailure("Evidence integrity verification failed") from exc
@@ -172,8 +221,27 @@ class StateStore:
             "verified": True,
         }
 
-    def save_analysis(self, result, pack=None):
+    def _source(self, con, source_id):
+        row = con.execute("SELECT body FROM sources WHERE id=?", [source_id]).fetchone()
+        if not row:
+            raise IntegrityFailure("Historical source snapshot is unavailable")
+        try:
+            value = json.loads(row[0])
+            if fingerprint(value) != source_id:
+                raise ValueError("Changed source snapshot")
+            return value
+        except (ValueError, TypeError) as exc:
+            raise IntegrityFailure("Source snapshot integrity verification failed") from exc
+
+    def save_analysis(self, result, pack=None, source=None):
         with self._transaction() as con:
+            if source is not None:
+                if not pack or fingerprint(source) != pack.get("source_id"):
+                    raise IntegrityFailure("Source snapshot is not bound to evidence")
+                con.execute(
+                    "INSERT OR IGNORE INTO sources VALUES(?,?)",
+                    [fingerprint(source), canonical_json(source)],
+                )
             if pack:
                 if fingerprint({k: v for k, v in pack.items() if k != "id"}) != pack["id"]:
                     raise IntegrityFailure("Invalid evidence pack")

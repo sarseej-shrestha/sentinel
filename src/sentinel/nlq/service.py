@@ -12,7 +12,16 @@ from sentinel.nlq.retrieval import SchemaRetriever
 from sentinel.nlq.sql_guard import SQLBlocked, guard_sql
 
 
-def ask(database, question, planner=None, retriever=None, query_timeout=3.0, allow_fallback=None):
+def _run(
+    database,
+    question,
+    planner=None,
+    retriever=None,
+    query_timeout=3.0,
+    allow_fallback=None,
+    *,
+    resolution_input=None,
+):
     """Legacy planner/retriever/fallback arguments are ignored, never called.
 
     Use the explicit deferred shadow interface for optional model/retrieval work.
@@ -43,7 +52,7 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
         "resolution": None,
     }
     try:
-        resolution = resolve(question)
+        resolution = resolution_input if resolution_input is not None else resolve(question)
         record["resolution"] = resolution
         full = resolution["plan"]
         core = {key: full[key] for key in QUERY_PLAN_SCHEMA["properties"]}
@@ -126,3 +135,28 @@ def ask(database, question, planner=None, retriever=None, query_timeout=3.0, all
     finally:
         record["latency_ms"] = (time.perf_counter() - start) * 1000
     return record
+
+
+def ask(database, question, planner=None, retriever=None, query_timeout=3.0, allow_fallback=None):
+    return _run(database, question, planner, retriever, query_timeout, allow_fallback)
+
+
+def execute_plan(database, canonical_plan, description, query_timeout=3.0):
+    """Internal guided adapter; clients cannot submit plans or SQL to the API."""
+    from sentinel.nlq.authority import validate_resolution
+    from sentinel.nlq.query_plan import validate_query_plan
+
+    full = resolve_execution_plan(validate_query_plan(canonical_plan))
+    if full["abstain"]:
+        raise ValueError("A guided task requires a complete canonical plan")
+    resolution = validate_resolution(
+        {
+            "state": "supported",
+            "plan": full,
+            "reason_code": None,
+            "fields": [],
+            "allowed_choices": {},
+            "message": "Validated guided task.",
+        }
+    )
+    return _run(database, description, query_timeout=query_timeout, resolution_input=resolution)

@@ -80,9 +80,11 @@ class Task(StrictModel):
                 f"Show {subject} late delivery rate between {self.start_date} and {self.end_date}"
             )
         if self.kind == "stockout":
-            return f"Show products likely to stock out within the next {self.horizon_days} days"
+            return f"Show inventory coverage below {self.horizon_days} days"
         if self.kind == "forecast":
             return f"Forecast demand for {self.product_id} at {self.warehouse_id}"
         if self.kind == "supplier_risk":
-            return f"Why is {self.supplier_id} considered high risk?"
-        return f"What happens if demand increases by {self.increase_percent:g}% at {self.warehouse_id}?"
+            return f"Show supplier evidence for {self.supplier_id}"
+        return (
+            f"What happens if demand increases by {self.increase_percent}% at {self.warehouse_id}?"
+        )

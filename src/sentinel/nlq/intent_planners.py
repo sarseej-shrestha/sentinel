@@ -66,6 +66,15 @@ def supplier_lateness(plan, text):
 
 
 def stockout_risk(plan, text):
+    # A recognized noun is not permission to discard an additional clause.
+    if re.search(r"\b(?:low|high)\s+(?:daily\s+)?(?:demand|sales)\b", text):
+        raise Clarify("unsupported_modifier", "metrics")
+    if not re.search(
+        r"\b(?:below|fewer|less|under|within|risk|likely|unlikely|coming|cutoff|threshold|short)\b",
+        text,
+    ):
+        raise Clarify("unsupported_modifier", "horizon_days")
+
     if (
         re.search(r"\bunlikely\b", text) and not re.search(r"\bunlikely to cover\b", text)
     ) or re.search(r"\b(lasts|exactly|equal)\b", text):

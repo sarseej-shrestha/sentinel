@@ -147,3 +147,35 @@ def forecast_from_result(result, horizon=14):
         evidence_id=result.evidence_id, evidence_rows=rows, last_observed_date=dates[-1].isoformat()
     )
     return output
+
+
+def current_forecast_context(rows, reference_date):
+    """Current daily forecasts require 56+ consecutive observations through reference."""
+    from datetime import date, timedelta
+
+    dates = sorted(str(r["demand_date"]) for r in rows if r.get("demand_date"))
+    last = dates[-1] if dates else None
+    status = "current"
+    if not dates:
+        status = "missing_history"
+    elif last > reference_date:
+        status = "future_observations"
+    elif last < reference_date:
+        status = "stale_history"
+    elif len(rows) < 56:
+        status = "insufficient_history"
+    elif len(dates) != len(rows) or any(r.get("data_quality_flag", "ok") != "ok" for r in rows):
+        status = "invalid_history"
+    elif any(
+        (date.fromisoformat(b) - date.fromisoformat(a)).days != 1 for a, b in zip(dates, dates[1:])
+    ):
+        status = "noncontiguous_history"
+    origin = date.fromisoformat(last) if last else None
+    return {
+        "reference_date": reference_date,
+        "last_observed_date": last,
+        "forecast_origin": last,
+        "prediction_start": str(origin + timedelta(days=1)) if origin else None,
+        "prediction_end": str(origin + timedelta(days=14)) if origin else None,
+        "freshness_status": status,
+    }

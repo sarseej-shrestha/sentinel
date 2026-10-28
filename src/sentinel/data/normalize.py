@@ -88,6 +88,14 @@ def flag_quality(frames, as_of=AS_OF):
                 "duplicate_daily_observation",
             )
 
+    # A reference must identify one valid parent, not merely an existing key.
+    # Duplicate parents are quarantined, including identical duplicates; no winner is selected.
+    for table, frame in frames.items():
+        for field, (parent, key) in references.items():
+            if field in frame and table != parent:
+                valid = frames[parent].loc[frames[parent]["data_quality_flag"] == "ok", key]
+                flag(table, ~frame[field].isin(valid), "invalid_parent_" + field)
+
     suppliers = set(frames["suppliers"]["supplier_id"])
     products = set(frames["products"]["product_id"])
     for table in ("products", "shipments", "purchase_orders", "supplier_events"):

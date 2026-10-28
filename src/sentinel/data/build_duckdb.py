@@ -109,7 +109,7 @@ VIEWS = {
  CASE WHEN sh.promised_date IS NULL OR sh.delivered_date IS NULL OR sh.data_quality_flag <> 'ok'
       THEN NULL ELSE sh.delivered_date > sh.promised_date END AS is_late,
  CASE WHEN sh.data_quality_flag = 'ok' THEN date_diff('day', sh.promised_date, sh.delivered_date) END AS delay_days
- FROM shipments sh LEFT JOIN suppliers s USING(supplier_id)
+ FROM shipments sh LEFT JOIN (SELECT * FROM suppliers WHERE data_quality_flag = 'ok') s USING(supplier_id)
 """,
     "supplier_view": """
  SELECT s.supplier_id, s.supplier_name, s.lead_time_days,
@@ -121,16 +121,16 @@ VIEWS = {
  coalesce(e.recent_delay_events, 0) AS recent_delay_events,
  s.source_dataset, s.source_record_id, s.synthetic_entity_id, s.data_quality_flag,
  s.missing_field_count, s.record_timestamp
- FROM suppliers s LEFT JOIN shipment_view sh USING(supplier_id)
+ FROM (SELECT * FROM suppliers WHERE data_quality_flag = 'ok') s LEFT JOIN shipment_view sh USING(supplier_id)
  LEFT JOIN (SELECT supplier_id, count(*) AS recent_delay_events FROM supplier_events
- WHERE event_type = 'delay' AND event_date > DATE '{as_of}' - INTERVAL 7 DAY
+ WHERE data_quality_flag = 'ok' AND event_type = 'delay' AND event_date > DATE '{as_of}' - INTERVAL 7 DAY
  AND event_date <= DATE '{as_of}' GROUP BY supplier_id) e USING(supplier_id)
  GROUP BY ALL
 """,
     "demand_view": """
  SELECT d.*, p.product_name, w.warehouse_name, c.day_of_week, c.is_weekend
- FROM demand_daily d LEFT JOIN products p USING(product_id)
- LEFT JOIN warehouses w USING(warehouse_id) LEFT JOIN calendar c ON c.calendar_date = d.demand_date
+ FROM demand_daily d LEFT JOIN (SELECT * FROM products WHERE data_quality_flag = 'ok') p USING(product_id)
+ LEFT JOIN (SELECT * FROM warehouses WHERE data_quality_flag = 'ok') w USING(warehouse_id) LEFT JOIN (SELECT * FROM calendar WHERE data_quality_flag = 'ok') c ON c.calendar_date = d.demand_date
 """,
     "risk_view": """
  WITH recent_demand AS (
@@ -150,7 +150,7 @@ VIEWS = {
  CASE WHEN coalesce(d.history_days, 0) <> 28 OR coalesce(d.excluded_demand_count, 0) > 0
  THEN i.data_quality_flag || ';incomplete_or_invalid_demand' ELSE i.data_quality_flag END AS data_quality_flag,
  i.missing_field_count, i.record_timestamp
- FROM latest i LEFT JOIN products p USING(product_id) LEFT JOIN warehouses w USING(warehouse_id)
+ FROM latest i LEFT JOIN (SELECT * FROM products WHERE data_quality_flag = 'ok') p USING(product_id) LEFT JOIN (SELECT * FROM warehouses WHERE data_quality_flag = 'ok') w USING(warehouse_id)
  LEFT JOIN recent_demand d USING(product_id, warehouse_id) WHERE i.rn = 1
 """,
 }
