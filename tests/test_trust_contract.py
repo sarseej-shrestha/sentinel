@@ -44,3 +44,14 @@ def test_constructed_invalid_task_never_executes(app, monkeypatch):
 )
 def test_unconsumed_constraints_require_clarification(question):
     assert resolve(question)["state"] != "supported"
+
+
+def test_rejected_coverage_wording_names_the_correction():
+    demand = resolve("Show products below 14 days of cover with low daily demand")
+    assert demand["state"] == "unsupported"
+    assert "low daily demand" in demand["message"]
+    assert "remove" in demand["message"].lower()
+    comparison = resolve("Show products with 14 days of stock remaining")
+    assert comparison["state"] == "unsupported"
+    assert "below" in comparison["message"].lower()
+    assert "comparison" in comparison["message"].lower()

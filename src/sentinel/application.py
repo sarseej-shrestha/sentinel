@@ -142,6 +142,10 @@ class Application:
             "targets": source["targets"] if source else [],
             "elapsed_ms": 0.0,
         }
+        if record.get("query_plan", {}).get("intent", "").startswith("supplier"):
+            result["warnings"].append(
+                "Outstanding overdue deliveries are unknown: shipment records have no open/cancelled status or receipt quantities. A missing delivered date is excluded from completed-delivery rates, not counted as open."
+            )
         if source:
             q = source["quality"]
             if q["entities"]["unevaluable"] or any(

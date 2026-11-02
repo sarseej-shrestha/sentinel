@@ -370,6 +370,42 @@ test("switching recommendations asks before replacing an unsaved note", async ({
   );
 });
 
+test("coverage and demand sensitivity expose observation dates and assumptions", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Inventory coverage", exact: false })
+    .click();
+  await page.getByRole("button", { name: "Run analysis", exact: true }).click();
+  const coverage = page.getByRole("region", {
+    name: "Inventory coverage results",
+  });
+  await expect(
+    coverage.getByRole("columnheader", { name: "Inventory date" }),
+  ).toBeVisible();
+  await expect(
+    coverage.getByRole("columnheader", { name: "History (days)" }),
+  ).toBeVisible();
+  await expect(page.getByText(/28 observed daily demand values/)).toBeVisible();
+  await page
+    .getByRole("button", { name: "What-if simulation", exact: false })
+    .click();
+  await page.getByRole("button", { name: "Run analysis", exact: true }).click();
+  const scenario = page.getByRole("region", {
+    name: "Demand-increase simulation results",
+  });
+  await expect(
+    scenario.getByRole("columnheader", { name: "Inventory date" }),
+  ).toBeVisible();
+  await expect(
+    scenario.getByRole("columnheader", { name: "History (days)" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/replenishment, allocations, lead times and capacity/i),
+  ).toBeVisible();
+});
+
 test("supplier transaction investigation reconciles the saved target", async ({
   page,
 }) => {
@@ -445,6 +481,31 @@ for (const [fixture, nav, expected] of [
     await expect(page.getByText("Snapshot integrity verified")).toBeVisible();
   });
 }
+
+test("stale forecast explains the gap and keeps editable inputs", async ({
+  page,
+}) => {
+  await page.route("**/api/**", (route) =>
+    route.continue({
+      url: route.request().url().replace("/api/", "/cases/stale-forecast/api/"),
+    }),
+  );
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Demand forecast", exact: false })
+    .click();
+  await page.getByRole("button", { name: "Run analysis", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Review the available information" }),
+  ).toBeVisible();
+  await expect(page.getByText(/stale history/i).first()).toBeVisible();
+  await expect(page.getByText(/last observed: 2026-09-23/i)).toBeVisible();
+  await expect(page.locator("form select").nth(0)).toHaveValue("P1");
+  await expect(page.locator("form select").nth(1)).toHaveValue("W3");
+  await page.locator("form select").nth(0).selectOption("P2");
+  await page.getByRole("button", { name: "Run analysis", exact: true }).click();
+  await expect(page.getByText("success", { exact: true })).toBeVisible();
+});
 
 test("stale revision keeps local note until the reviewer refreshes explicitly", async ({
   page,

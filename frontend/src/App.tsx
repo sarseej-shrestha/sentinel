@@ -943,8 +943,10 @@ export default function App() {
     stockout: [
       "product_id",
       "warehouse_id",
+      "inventory_date",
       "on_hand",
       "avg_daily_demand",
+      "history_days",
       "days_of_cover",
       "review_level",
     ],
@@ -960,8 +962,10 @@ export default function App() {
     ],
     what_if: [
       "product_id",
+      "inventory_date",
       "on_hand",
       "avg_daily_demand",
+      "history_days",
       "scenario_daily_demand",
       "days_of_cover",
       "scenario_days_of_cover",
@@ -1444,6 +1448,27 @@ export default function App() {
                             </>
                           ) : (
                             <>
+                              {kind === "stockout" && (
+                                <p className="fine">
+                                  Coverage is stock units on the inventory date
+                                  divided by the mean units per day from{" "}
+                                  {result.rows[0]?.history_days} observed daily
+                                  demand values through {result.reference_date}.
+                                  Missing or excluded observations appear in
+                                  population quality. Coverage is an estimate,
+                                  not a guaranteed stockout date.
+                                </p>
+                              )}
+                              {kind === "what_if" && (
+                                <p className="fine">
+                                  The scenario scales the same{" "}
+                                  {result.rows[0]?.history_days} observed daily
+                                  demand values through {result.reference_date}
+                                  by {form.increase_percent}%, while stock stays
+                                  fixed. Replenishment, allocations, lead times
+                                  and capacity are not modeled.
+                                </p>
+                              )}
                               {kind === "what_if" && (
                                 <ScenarioChart rows={result.rows} />
                               )}

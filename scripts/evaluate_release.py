@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
@@ -23,6 +24,7 @@ import numpy as np
 from scripts.evaluation_protocol import load_holdout
 from sentinel.analytics.forecast import forecast
 from sentinel.application import Application
+from sentinel.config import AS_OF
 from sentinel.nlq.authority import resolve
 from sentinel.nlq.query_plan import QUERY_PLAN_SCHEMA, validate_query_plan
 
@@ -47,15 +49,35 @@ def scores(truth, predicted):
 def forecast_evaluation(database):
     with duckdb.connect(str(database), read_only=True) as con:
         rows = con.execute(
-            "SELECT product_id,warehouse_id,units FROM demand_view ORDER BY product_id,warehouse_id,demand_date"
+            "SELECT product_id,warehouse_id,demand_date,units,data_quality_flag "
+            "FROM demand_view ORDER BY product_id,warehouse_id,demand_date,source_record_id"
         ).fetchall()
     series = {}
-    for product, warehouse, units in rows:
-        series.setdefault((product, warehouse), []).append(units)
+    for product, warehouse, day, units, quality in rows:
+        series.setdefault((product, warehouse), []).append((day, units, quality))
+    eligible, excluded = {}, {}
+    for key, observations in series.items():
+        days = [day for day, _, _ in observations]
+        values = [value for _, value, _ in observations]
+        reasons = []
+        if len(days) < 98:
+            reasons.append("fewer than 98 observations for an 84-day origin and 14-day horizon")
+        if any(day is None for day in days) or any(
+            (b - a) != timedelta(days=1) for a, b in zip(days, days[1:]) if a and b
+        ):
+            reasons.append("missing or duplicate daily dates")
+        if any(quality != "ok" for _, _, quality in observations):
+            reasons.append("excluded or invalid observations")
+        if any(value is None or not np.isfinite(value) or value < 0 for value in values):
+            reasons.append("missing or invalid demand values")
+        if not days or days[-1] != date.fromisoformat(AS_OF):
+            reasons.append("history does not end on the declared reference date")
+        if reasons:
+            excluded["/".join(key)] = reasons
+        else:
+            eligible[key] = values
     records = []
-    for key, values in series.items():
-        if len(values) < 98:
-            continue
+    for key, values in eligible.items():
         final_origin = len(values) - 14
         origins = [(i, "development") for i in range(84, final_origin - 13, 14)] + [
             (final_origin, "final_chronological_block")
@@ -88,7 +110,7 @@ def forecast_evaluation(database):
             "origins": len(selected),
             "per_series": {
                 "/".join(key): report([r for r in selected if r["series"] == list(key)])
-                for key in series
+                for key in eligible
             },
             "by_horizon": [
                 {
@@ -106,6 +128,8 @@ def forecast_evaluation(database):
     return {
         "scope": "Internal previously exposed synthetic series. No interval calibration or model selection performed. Identical origins/information for both methods.",
         "series_count": len(series),
+        "eligible_series": len(eligible),
+        "excluded_series": excluded,
         "summary": summary,
     }
 

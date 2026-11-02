@@ -30,6 +30,41 @@ def test_missing_entire_demand_series_remains_in_population(tmp_path):
     }
     assert q["missing_observations"] == 28
     assert result["state"] == "success" and len(result["recommendations"]) == 17
+    target = next(t for t in result["targets"] if t["id"] == "position:P1:W3")
+    assert any("missing" in reason.lower() for reason in target["reasons"])
+
+
+def test_zero_observed_demand_differs_from_zero_stock(tmp_path):
+    def mutate(r):
+        r["demand_daily"] = [
+            x[:4] + (0,) if x[2:4] == ("P1", "W3") else x for x in r["demand_daily"]
+        ]
+        r["inventory_daily"] = [
+            x[:4] + (0,) + x[5:] if x[2:4] == ("P2", "W3") and x[1] == date(2026, 9, 30) else x
+            for x in r["inventory_daily"]
+        ]
+
+    result = run(tmp_path, mutate, kind="stockout", horizon_days=14)
+    zero_demand = next(t for t in result["targets"] if t["id"] == "position:P1:W3")
+    assert not zero_demand["assessed"]
+    assert any("zero observed demand" in reason.lower() for reason in zero_demand["reasons"])
+    zero_stock = next(
+        r for r in result["rows"] if r["product_id"] == "P2" and r["warehouse_id"] == "W3"
+    )
+    assert zero_stock["on_hand"] == 0 and zero_stock["days_of_cover"] == 0
+
+
+def test_zero_demand_cannot_produce_scenario_coverage(tmp_path):
+    def mutate(r):
+        r["demand_daily"] = [
+            x[:4] + (0,) if x[2:4] == ("P1", "W3") else x for x in r["demand_daily"]
+        ]
+
+    result = run(tmp_path, mutate, kind="what_if", warehouse_id="W3", increase_percent=15)
+    target = next(t for t in result["targets"] if t["id"] == "position:P1:W3")
+    assert not target["assessed"] and not target["matching"]
+    assert all(r["product_id"] != "P1" for r in result["rows"])
+    assert any("zero observed demand" in reason.lower() for reason in target["reasons"])
 
 
 def test_zero_evaluable_supplier_is_not_lost(tmp_path):

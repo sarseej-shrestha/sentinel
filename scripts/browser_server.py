@@ -1,6 +1,7 @@
 """Real local backend for browser tests, isolated from every user database."""
 
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import uvicorn
@@ -16,10 +17,21 @@ def main():
         db = build_database(root / "analytics.duckdb")
         app = create_app(db, root / "state.sqlite3", Path("frontend/dist"))
         # Fixed disposable failure fixtures; these routes exist only in this test server.
-        for name in ("missing-demand", "unevaluable-supplier", "unevaluable-all"):
+        for name in (
+            "missing-demand",
+            "unevaluable-supplier",
+            "unevaluable-all",
+            "stale-forecast",
+        ):
             rows = synthetic_records()
             if name == "missing-demand":
                 rows["demand_daily"] = [r for r in rows["demand_daily"] if r[2:4] != ("P1", "W3")]
+            elif name == "stale-forecast":
+                rows["demand_daily"] = [
+                    r
+                    for r in rows["demand_daily"]
+                    if r[2:4] != ("P1", "W3") or r[1] <= date(2026, 9, 23)
+                ]
             else:
                 rows["shipments"] = [
                     r[:6] + (None,) + r[7:] if name == "unevaluable-all" or r[2] == "S1" else r

@@ -233,9 +233,26 @@ def clarification(question):
         "metrics": "Please select a supported metric; counts and rates are not interchangeable.",
         "intent": "Please request one supported supply-chain analysis at a time.",
     }
+    message = " ".join(prompts[f] for f in result.required_fields if f in prompts)
+    text = question.casefold() if isinstance(question, str) else ""
+    extra_demand = re.search(r"\b(low|high)\s+(daily\s+)?(demand|sales)\b", text)
+    if result.reason == "unsupported_modifier" and extra_demand:
+        message = (
+            f"The extra '{extra_demand.group()}' condition cannot be represented by the "
+            "Inventory coverage form. Keep this request unrun, or explicitly remove that "
+            "condition and choose a coverage threshold in the guided form."
+        )
+    elif result.reason == "unsupported_modifier" and re.search(
+        r"\b\d+ days? of stock remaining\b", text
+    ):
+        message = (
+            "The comparison is unclear: 'days of stock remaining' does not say below, "
+            "above or exactly equal. If you mean below a threshold, choose that threshold "
+            "in the Inventory coverage guided form; otherwise keep this request unrun."
+        )
     return {
         "reason": result.reason,
         "required_fields": list(result.required_fields),
-        "question": " ".join(prompts[f] for f in result.required_fields if f in prompts)
+        "question": message
         or "Please restate the request using supported metrics, filters and explicit quantities.",
     }

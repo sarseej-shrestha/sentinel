@@ -185,6 +185,7 @@ def capture(database, plan):
             absent = len(expected - observed) if kind != "forecast" else 0
             missing += absent
             reasons = []
+            mean = sum(r["units"] for r in valid) / len(valid) if valid else None
             if kind == "forecast":
                 context = current_forecast_context(history, AS_OF)
                 assessed = context["freshness_status"] == "current"
@@ -197,11 +198,23 @@ def capture(database, plan):
                     and not absent
                     and len(valid) == 28
                 )
-            mean = sum(r["units"] for r in valid) / len(valid) if valid else None
-            if kind != "forecast" and not mean:
-                assessed = False
-            if not assessed:
-                reasons.append("Incomplete, ambiguous or invalid inventory/demand evidence")
+                if not inventory:
+                    reasons.append("Missing inventory observation")
+                elif len(latest) != 1:
+                    reasons.append("Ambiguous latest inventory observation")
+                elif latest[0]["data_quality_flag"] != "ok":
+                    reasons.append("Invalid latest inventory observation")
+                if absent:
+                    reasons.append(f"Missing {absent} expected daily demand observations")
+                if len(valid) != 28:
+                    reasons.append("Excluded or invalid daily demand observations")
+                if mean == 0 and len(valid) == 28:
+                    reasons.append(
+                        "Zero observed demand in the 28-day window; coverage cannot be estimated"
+                    )
+                assessed = assessed and mean is not None and mean > 0
+                if not assessed and not reasons:
+                    reasons.append("Demand or inventory evidence is unavailable")
             cover = latest[0]["on_hand"] / mean if assessed and latest and mean else None
             matching = assessed and (kind != "stockout" or cover < plan["horizon_days"])
             targets[target] = {
