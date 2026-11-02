@@ -233,6 +233,56 @@ class StateStore:
         except (ValueError, TypeError) as exc:
             raise IntegrityFailure("Source snapshot integrity verification failed") from exc
 
+    def source_records(self, evidence_id, target_id, offset=0, limit=25, kind=None):
+        if offset < 0 or not 1 <= limit <= 100:
+            raise ValueError("Invalid source page")
+        with self._connection() as con:
+            con.execute("BEGIN")
+            self._events(con)
+            pack = self._pack(con, evidence_id)
+            if not pack.get("source_id"):
+                return {
+                    "available": False,
+                    "message": "Historical transaction snapshots were not captured for this evidence version.",
+                    "records": [],
+                    "total": 0,
+                    "offset": offset,
+                    "target": None,
+                    "source_id": None,
+                    "period": None,
+                    "reference_date": pack["reference_date"],
+                }
+            source = self._source(con, pack["source_id"])
+            target = next((t for t in source["targets"] if t["id"] == target_id), None)
+            if target is None:
+                raise KeyError("Target is outside this saved evidence scope")
+            records = [
+                r
+                for r in source["records"]
+                if r["target_id"] == target_id and (kind is None or r["kind"] == kind)
+            ]
+            return {
+                "available": True,
+                "message": "Verified captured source records; replay does not query the current dataset.",
+                "source_id": pack["source_id"],
+                "target": target,
+                "period": source["period"],
+                "reference_date": source["reference_date"],
+                "total": len(records),
+                "offset": offset,
+                "records": records[offset : offset + limit],
+            }
+
+    def action(self, action_id):
+        with self._connection() as con:
+            con.execute("BEGIN")
+            events = self._events(con)
+            actions = self._projections(con, events)
+            match = next((a for a in actions if a["id"] == action_id), None)
+            if match is None:
+                raise KeyError("Unknown proposal")
+            return match
+
     def save_analysis(self, result, pack=None, source=None):
         with self._transaction() as con:
             if source is not None:

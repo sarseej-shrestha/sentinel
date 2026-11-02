@@ -23,6 +23,7 @@ class Recommendation(StrictModel):
     label: str
     text: str
     target_row_ids: list[str]
+    target_id: str | None = None
 
 
 class ForecastPoint(StrictModel):
@@ -115,6 +116,29 @@ class Evidence(StrictModel):
     offset: int
     total: int
     verified: bool
+
+
+class SourceRecord(StrictModel):
+    id: str
+    target_id: str
+    kind: Literal["shipment", "supplier", "supplier_event", "inventory", "demand"]
+    membership: Literal["in_scope", "unassignable"]
+    disposition: Literal["included", "excluded", "unassignable"]
+    contribution: str | None
+    reasons: list[str]
+    record: dict[str, JsonValue]
+
+
+class SourcePage(StrictModel):
+    available: bool
+    message: str
+    source_id: str | None
+    target: dict[str, JsonValue] | None
+    period: dict[str, str] | None
+    reference_date: str
+    total: int
+    offset: int
+    records: list[SourceRecord]
 
 
 class Catalog(StrictModel):
@@ -219,6 +243,21 @@ def create_app(database, state, static_dir=None):
         limit: int = Query(default=25, ge=1, le=100),
     ):
         return service.store.evidence(evidence_id, offset, limit)
+
+    @app.get("/api/evidence/{evidence_id}/targets/{target_id}", response_model=SourcePage)
+    def source_records(
+        evidence_id: str,
+        target_id: str,
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=25, ge=1, le=100),
+        kind: Literal["shipment", "supplier", "supplier_event", "inventory", "demand"]
+        | None = None,
+    ):
+        return service.store.source_records(evidence_id, target_id, offset, limit, kind)
+
+    @app.get("/api/proposals/{action_id}", response_model=Action)
+    def action(action_id: str):
+        return service.store.action(action_id)
 
     @app.post("/api/proposals", response_model=Action)
     def propose(request: ProposalRequest):

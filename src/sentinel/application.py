@@ -181,30 +181,63 @@ class Application:
                 result["warnings"].append(
                     "Review levels combine transparent rules with a synthetic classifier. They are not validated operational probabilities."
                 )
-            for i, rec in enumerate(record.get("recommendations", [])):
-                if not pack["truncated"]:
-                    indices = rec["target_indices"]
-                    target = query["rows"][indices[0]]
-                    label = (
-                        " / ".join(
-                            str(target[k])
-                            for k in ("supplier_id", "product_id", "warehouse_id", "shipment_id")
-                            if k in target
+            if source and not pack["truncated"]:
+                for target in source["targets"]:
+                    if not target["assessed"] or not target["matching"]:
+                        continue
+                    indices = [
+                        i
+                        for i, row in enumerate(pack["rows"])
+                        if target_id(record["query_plan"]["intent"], row) == target["id"]
+                    ]
+                    if not indices:
+                        continue
+                    row = pack["rows"][indices[0]]
+                    kind = record["query_plan"]["intent"]
+                    if kind.startswith("supplier"):
+                        period = (
+                            (
+                                task.start_date
+                                + " through "
+                                + task.end_date
+                                + " (inclusive, promised dates)"
+                            )
+                            if task and kind == "supplier_delay"
+                            else "the recorded delivery history"
                         )
-                        if len(indices) == 1
-                        else f"All {len(indices)} result rows"
-                    )
+                        text = f"{row.get('supplier_name') or target['label']} ({target['label']}): {target['late']} late of {target['evaluable']} evaluable deliveries in {period}; {target['excluded']} excluded, {target['unassignable']} with unassignable dates. Inspect promised versus delivered dates and exclusions; document the supplier follow-up rationale. No cause or external action is inferred."
+                    elif kind == "forecast":
+                        text = f"{target['label']}: review the 14 daily point estimates and seasonal baseline beginning {forecast_context['prediction_start']}. Inspect {len(query['rows'])} historical observations and document whether the forecast supports further investigation. Uncertainty is not calibrated."
+                    else:
+                        text = f"{target['label']}: observed stock {row['on_hand']} units; mean demand {row['avg_daily_demand']:.2f} units/day; coverage {row['days_of_cover']:.2f} days as of {AS_OF}. "
+                        if kind == "what_if":
+                            text += f"Demand sensitivity gives {row['scenario_days_of_cover']:.2f} days under the requested increase, with stock and replenishment unchanged. "
+                        text += "Inspect source observations and document follow-up rationale; confirmed inbound supply and operational requirements are not established here."
                     result["recommendations"].append(
                         {
-                            "id": f"r{i + 1}",
-                            "label": label,
-                            "text": rec["recommendation"],
-                            "target_row_ids": [
-                                pack["row_ids"][pack["rows"].index(query["rows"][j])]
-                                for j in indices
-                            ],
+                            "id": f"r{len(result['recommendations']) + 1}",
+                            "target_id": target["id"],
+                            "label": target["label"],
+                            "text": text,
+                            "target_row_ids": [pack["row_ids"][i] for i in indices],
                         }
                     )
+            else:
+                for i, rec in enumerate(record.get("recommendations", [])):
+                    if not pack["truncated"]:
+                        indices = rec["target_indices"]
+                        result["recommendations"].append(
+                            {
+                                "id": f"r{i + 1}",
+                                "target_id": None,
+                                "label": f"Result {i + 1}",
+                                "text": rec["recommendation"],
+                                "target_row_ids": [
+                                    pack["row_ids"][pack["rows"].index(query["rows"][j])]
+                                    for j in indices
+                                ],
+                            }
+                        )
             if "forecast" in record:
                 forecast = record["forecast"]
                 last = date.fromisoformat(forecast["last_observed_date"])

@@ -19,7 +19,9 @@ import {
   Truck,
   X,
 } from "lucide-react";
-import { api } from "./api";
+import { Sources, type Target } from "./Sources";
+import { api, ApiError } from "./api";
+import { readSession, writeSession } from "./drafts";
 import type {
   Action,
   Analysis,
@@ -188,7 +190,7 @@ function interpretation(task: Task) {
     case "forecast":
       return `${task.product_id} at ${task.warehouse_id} · next 14 daily demand estimates · seasonal baseline`;
     case "supplier_risk":
-      return `${task.supplier_id} · all observed deliveries · review rules and synthetic model drivers`;
+      return `${task.supplier_id} · observed deliveries · transparent review rules and experimental model context`;
     case "what_if":
       return `${task.warehouse_id} · increase demand by ${task.increase_percent}% · stock and replenishment unchanged`;
   }
@@ -336,7 +338,15 @@ function Dialog({
     </dialog>
   );
 }
-function EvidenceDialog({ id, onClose }: { id: string; onClose: () => void }) {
+function EvidenceDialog({
+  id,
+  targets,
+  onClose,
+}: {
+  id: string;
+  targets: Target[];
+  onClose: () => void;
+}) {
   const [page, setPage] = useState<Evidence | null>(null),
     [offset, setOffset] = useState(0),
     [error, setError] = useState("");
@@ -378,7 +388,7 @@ function EvidenceDialog({ id, onClose }: { id: string; onClose: () => void }) {
           )}
           <Table
             rows={page.rows}
-            caption="Full source evidence, including lineage and quality flags"
+            caption="Saved query-result rows and lineage references"
           />
           <div className="pagination">
             <button
@@ -388,7 +398,8 @@ function EvidenceDialog({ id, onClose }: { id: string; onClose: () => void }) {
               <ChevronLeft size={16} /> Previous
             </button>
             <span aria-live="polite">
-              {offset + 1}–{Math.min(offset + 25, page.total)} of {page.total}
+              {page.total ? offset + 1 : 0}–{Math.min(offset + 25, page.total)}{" "}
+              of {page.total}
             </span>
             <button
               disabled={offset + 25 >= page.total}
@@ -397,6 +408,7 @@ function EvidenceDialog({ id, onClose }: { id: string; onClose: () => void }) {
               Next <ChevronRight size={16} />
             </button>
           </div>
+          <Sources evidenceId={id} targets={targets} />
           <details>
             <summary>Provenance and query details</summary>
             <dl>
@@ -436,16 +448,63 @@ function Review({
   existing?: Action;
   onSaved: () => void;
 }) {
-  const [selected, setSelected] = useState(existing?.recommendation_id ?? ""),
-    [text, setText] = useState(existing?.text ?? ""),
-    [reviewer, setReviewer] = useState(existing?.reviewer ?? ""),
-    [action, setAction] = useState<Action | undefined>(existing),
+  const draftKey = existing?.id ?? analysis.analysis_id;
+  const cached = readSession<{
+    selected: string;
+    text: string;
+    reviewer: string;
+    action?: Action;
+    retry?: { signature: string; key: string };
+  } | null>("draft:" + draftKey, null);
+  const [selected, setSelected] = useState(
+      cached?.selected ?? existing?.recommendation_id ?? "",
+    ),
+    [text, setText] = useState(cached?.text ?? existing?.text ?? ""),
+    [reviewer, setReviewer] = useState(
+      cached?.reviewer ?? existing?.reviewer ?? "",
+    ),
+    [action, setAction] = useState<Action | undefined>(
+      existing ?? cached?.action,
+    ),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [confirm, setConfirm] = useState<"approve" | "reject" | null>(null);
-  const retry = useRef<{ signature: string; key: string } | null>(null);
+  const [discard, setDiscard] = useState(false),
+    [conflict, setConflict] = useState(false),
+    [storageError, setStorageError] = useState(false),
+    [pendingSelection, setPendingSelection] = useState<string | null>(null);
+  const retry = useRef<{ signature: string; key: string } | null>(
+    cached?.retry ?? null,
+  );
   const final = action && action.state !== "pending";
   const dirty = !!action && text !== action.text;
+  useEffect(() => {
+    const value = { selected, text, reviewer, action, retry: retry.current };
+    const ok = writeSession("draft:" + draftKey, value);
+    if (action) writeSession("draft:" + action.id, value);
+    setStorageError(!ok);
+  }, [selected, text, reviewer, action, draftKey]);
+  useEffect(() => {
+    if (!(action ? text !== action.text : !!text.trim())) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [text, action]);
+  async function checkSaved() {
+    if (!action) return;
+    try {
+      setAction(await api<Action>("/proposals/" + action.id));
+      setConflict(false);
+      setError(
+        "Saved revision refreshed. Your local note was preserved; review before saving.",
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   async function submit(decision?: "edit" | "approve" | "reject") {
     setBusy(true);
     setError("");
@@ -468,6 +527,13 @@ function Review({
     const signature = JSON.stringify([endpoint, payload]);
     if (retry.current?.signature !== signature)
       retry.current = { signature, key: crypto.randomUUID() };
+    writeSession("draft:" + draftKey, {
+      selected,
+      text,
+      reviewer,
+      action,
+      retry: retry.current,
+    });
     try {
       const saved = await api<Action>(endpoint, {
         ...payload,
@@ -480,6 +546,7 @@ function Review({
       setConfirm(null);
     } catch (e) {
       setError((e as Error).message);
+      if (e instanceof ApiError && e.status === 409) setConflict(true);
     } finally {
       setBusy(false);
     }
@@ -496,6 +563,23 @@ function Review({
         explicitly approve or reject it.
       </p>
       {error && <Alert>{error}</Alert>}
+      {storageError && (
+        <Alert>
+          Browser session storage is unavailable. Keep this page open and save
+          your draft before leaving.
+        </Alert>
+      )}
+      {conflict && <button onClick={checkSaved}>Check saved revision</button>}
+      {final && text !== action.text && (
+        <Alert>
+          Your local note is unsaved and is not part of this final decision.
+          Committed note: {action.text}
+        </Alert>
+      )}
+      <p className="fine">
+        Unsaved notes are retained in this browser tab's session where storage
+        is available. Closing the tab or clearing browser data may remove them.
+      </p>
       {!action && (
         <label>
           Recommendation
@@ -503,10 +587,17 @@ function Review({
             aria-label="Recommendation"
             value={selected}
             onChange={(e) => {
-              setSelected(e.target.value);
+              const next = e.target.value;
+              const suggested =
+                analysis.recommendations.find((r) => r.id === selected)?.text ??
+                "";
+              if (next !== selected && text.trim() && text !== suggested) {
+                setPendingSelection(next);
+                return;
+              }
+              setSelected(next);
               setText(
-                analysis.recommendations.find((r) => r.id === e.target.value)
-                  ?.text ?? "",
+                analysis.recommendations.find((r) => r.id === next)?.text ?? "",
               );
             }}
           >
@@ -545,6 +636,50 @@ function Review({
         Reviewer names are local attribution, not authenticated identities. No
         orders, inventory or suppliers will be changed.
       </p>
+      {pendingSelection !== null && (
+        <Dialog
+          title="Discard unsaved note?"
+          onClose={() => setPendingSelection(null)}
+        >
+          <p>
+            Your current note has not been saved. Switching recommendations
+            replaces it with the next recommendation’s suggested text.
+          </p>
+          <button onClick={() => setPendingSelection(null)}>Keep note</button>
+          <button
+            onClick={() => {
+              setSelected(pendingSelection);
+              setText(
+                analysis.recommendations.find((r) => r.id === pendingSelection)
+                  ?.text ?? "",
+              );
+              setPendingSelection(null);
+            }}
+          >
+            Discard note and switch
+          </button>
+        </Dialog>
+      )}
+      {discard && (
+        <Dialog
+          title="Discard unsaved edits?"
+          onClose={() => setDiscard(false)}
+        >
+          <p>
+            This restores the saved pending revision. It does not undo a
+            committed decision.
+          </p>
+          <button onClick={() => setDiscard(false)}>Keep editing</button>
+          <button
+            onClick={() => {
+              setText(action?.text ?? "");
+              setDiscard(false);
+            }}
+          >
+            Discard unsaved edits
+          </button>
+        </Dialog>
+      )}
       {final ? (
         <div className="verified" role="status">
           <Check size={18} />
@@ -568,7 +703,7 @@ function Review({
               <span className="tag">Pending · revision {action.revision}</span>
               <button
                 disabled={busy || !dirty}
-                onClick={() => setText(action.text)}
+                onClick={() => setDiscard(true)}
               >
                 Revert draft
               </button>
@@ -686,11 +821,26 @@ export default function App() {
   }
   function choose(next: Kind) {
     reset();
+    const previous = readSession<Record<string, Analysis>>(
+      "workspace-results",
+      {},
+    )[next];
+    if (previous) {
+      setResult(previous);
+      setForms((f) => ({ ...f, [next]: previous.task ?? f[next] }));
+    }
+
     setKind(next);
     setView("workspace");
   }
   function update(values: Partial<Task>) {
     reset();
+    const previous = readSession<Record<string, Analysis>>(
+      "workspace-results",
+      {},
+    );
+    delete previous[kind];
+    writeSession("workspace-results", previous);
     setForms({ ...forms, [kind]: { ...form, ...values } });
   }
   async function run(e: React.FormEvent) {
@@ -711,6 +861,10 @@ export default function App() {
       );
       if (id === sequence.current) {
         setResult(next);
+        writeSession("workspace-results", {
+          ...readSession<Record<string, Analysis>>("workspace-results", {}),
+          [kind]: next,
+        });
         setTimeout(() => resultHeading.current?.focus(), 0);
       }
     } catch (e) {
@@ -1302,6 +1456,69 @@ export default function App() {
                           )}
                         </>
                       )}
+                      {result.quality && (
+                        <section
+                          aria-label="Population quality"
+                          className="limitations"
+                        >
+                          <h3>Population quality</h3>
+                          <p>
+                            {result.quality.entities.assessed} assessed ·{" "}
+                            {result.quality.entities.matching} matching ·{" "}
+                            {result.quality.entities.not_matching} assessed
+                            outside threshold ·{" "}
+                            {result.quality.entities.unevaluable} unevaluable ·{" "}
+                            {result.quality.entities.total} total observed
+                            entities
+                          </p>
+                          <p>
+                            {result.quality.missing_observations} missing
+                            expected daily observations
+                          </p>
+                          <p>{result.quality.scope}</p>
+                          <Table
+                            caption="Observation quality counts"
+                            rows={Object.entries(
+                              result.quality.observations,
+                            ).map(([kind, counts]) => ({ kind, ...counts }))}
+                          />
+                          {result.targets
+                            ?.filter((t) => !t.assessed)
+                            .map((t) => (
+                              <p key={t.id}>
+                                {t.label}: {t.reasons.join("; ")} ·{" "}
+                                {t.missing_observations} missing observations
+                              </p>
+                            ))}
+                        </section>
+                      )}
+                      {result.forecast_context && (
+                        <section aria-label="Forecast dates">
+                          <h3>Forecast origin and freshness</h3>
+                          <p>
+                            Reference: {result.forecast_context.reference_date}{" "}
+                            · last observed:{" "}
+                            {result.forecast_context.last_observed_date ??
+                              "unavailable"}{" "}
+                            · origin:{" "}
+                            {result.forecast_context.forecast_origin ??
+                              "unavailable"}
+                          </p>
+                          <p>
+                            Prediction dates:{" "}
+                            {result.forecast_context.prediction_start ??
+                              "unavailable"}{" "}
+                            through{" "}
+                            {result.forecast_context.prediction_end ??
+                              "unavailable"}{" "}
+                            ·{" "}
+                            {result.forecast_context.freshness_status.replaceAll(
+                              "_",
+                              " ",
+                            )}
+                          </p>
+                        </section>
+                      )}
                       {result.evidence_id && (
                         <button
                           className="evidence-button"
@@ -1343,7 +1560,11 @@ export default function App() {
         </main>
       </div>
       {evidence && (
-        <EvidenceDialog id={evidence} onClose={() => setEvidence(null)} />
+        <EvidenceDialog
+          id={evidence}
+          targets={result?.targets ?? []}
+          onClose={() => setEvidence(null)}
+        />
       )}
     </div>
   );

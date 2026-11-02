@@ -1,3 +1,4 @@
+import type { Target } from "./Sources";
 export type Kind =
   | "supplier_delay"
   | "stockout"
@@ -20,6 +21,7 @@ export type Recommendation = {
   label: string;
   text: string;
   target_row_ids: string[];
+  target_id?: string | null;
 };
 export type Analysis = {
   analysis_id: string;
@@ -40,6 +42,36 @@ export type Analysis = {
     history_days: number;
     points: { date: string; forecast: number; baseline: number }[];
   };
+  quality?: {
+    scope: string;
+    entities: {
+      total: number;
+      assessed: number;
+      matching: number;
+      not_matching: number;
+      unevaluable: number;
+    };
+    observations: Record<
+      string,
+      {
+        total: number;
+        included: number;
+        excluded: number;
+        unassignable: number;
+      }
+    >;
+    missing_observations: number;
+    limitations: string[];
+  } | null;
+  targets?: Target[];
+  forecast_context?: {
+    reference_date: string;
+    last_observed_date: string | null;
+    forecast_origin: string | null;
+    prediction_start: string | null;
+    prediction_end: string | null;
+    freshness_status: string;
+  } | null;
   elapsed_ms: number;
 };
 export type Action = {

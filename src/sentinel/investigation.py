@@ -10,6 +10,7 @@ from datetime import date, timedelta
 
 import duckdb
 
+from sentinel.analytics.forecast import current_forecast_context
 from sentinel.config import AS_OF
 
 TABLES = {
@@ -185,7 +186,10 @@ def capture(database, plan):
             missing += absent
             reasons = []
             if kind == "forecast":
-                assessed = bool(valid) and len(valid) == len(history)
+                context = current_forecast_context(history, AS_OF)
+                assessed = context["freshness_status"] == "current"
+                if not assessed:
+                    reasons.append(context["freshness_status"].replace("_", " "))
             else:
                 assessed = (
                     len(latest) == 1
