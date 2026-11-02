@@ -39,6 +39,8 @@ TASKS = [
 
 def scores(truth, predicted):
     error = np.asarray(truth) - np.asarray(predicted)
+    if not error.size:
+        return {"n": 0, "mae": None, "rmse": None}
     return {
         "n": int(error.size),
         "mae": float(np.mean(np.abs(error))),
@@ -52,14 +54,23 @@ def forecast_evaluation(database):
             "SELECT product_id,warehouse_id,demand_date,units,data_quality_flag "
             "FROM demand_view ORDER BY product_id,warehouse_id,demand_date,source_record_id"
         ).fetchall()
+        observed_positions = con.execute(
+            "SELECT DISTINCT product_id,warehouse_id FROM inventory_daily "
+            "WHERE inventory_date <= ? AND product_id IS NOT NULL AND warehouse_id IS NOT NULL",
+            [AS_OF],
+        ).fetchall()
     series = {}
     for product, warehouse, day, units, quality in rows:
         series.setdefault((product, warehouse), []).append((day, units, quality))
+    population = set(series) | set(observed_positions)
     eligible, excluded = {}, {}
-    for key, observations in series.items():
+    for key in sorted(population):
+        observations = series.get(key, [])
         days = [day for day, _, _ in observations]
         values = [value for _, value, _ in observations]
         reasons = []
+        if not observations:
+            reasons.append("no daily demand observations for an observed inventory position")
         if len(days) < 98:
             reasons.append("fewer than 98 observations for an 84-day origin and 14-day horizon")
         if any(day is None for day in days) or any(
@@ -126,8 +137,8 @@ def forecast_evaluation(database):
             ],
         }
     return {
-        "scope": "Internal previously exposed synthetic series. No interval calibration or model selection performed. Identical origins/information for both methods.",
-        "series_count": len(series),
+        "scope": "Observed inventory positions through the reference date plus demand series; no assumption that every catalog pair was active. Internal previously exposed synthetic data. No interval calibration or model selection performed. Identical origins/information for both methods.",
+        "series_count": len(population),
         "eligible_series": len(eligible),
         "excluded_series": excluded,
         "summary": summary,
