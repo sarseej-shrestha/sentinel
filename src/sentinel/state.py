@@ -28,6 +28,71 @@ def fingerprint(value):
     return hashlib.sha256(canonical_json(value).encode()).hexdigest()
 
 
+def history_summary(result):
+    task = result.get("task") or {}
+    kind = task.get("kind")
+    titles = {
+        "supplier_delay": "Supplier late deliveries",
+        "stockout": "Inventory coverage",
+        "forecast": "Demand forecast",
+        "supplier_risk": "Supplier investigation",
+        "what_if": "Demand-increase simulation",
+    }
+    title = titles.get(kind, "Saved analysis")
+    rows = result.get("rows") or []
+
+    def supplier_label(supplier_id):
+        if not supplier_id:
+            return "All suppliers"
+        name = next(
+            (
+                row.get("supplier_name")
+                for row in rows
+                if row.get("supplier_id") == supplier_id and row.get("supplier_name")
+            ),
+            None,
+        )
+        return f"{name} ({supplier_id})" if name else f"Supplier {supplier_id}"
+
+    if kind == "supplier_delay":
+        scope = supplier_label(task.get("supplier_id"))
+        period = f"{task.get('start_date')} through {task.get('end_date')}"
+    elif kind == "stockout":
+        scope = f"All positions below {task.get('horizon_days')} days"
+        period = f"Reference {result.get('reference_date')}"
+    elif kind == "forecast":
+        scope = f"{task.get('product_id')} / {task.get('warehouse_id')}"
+        period = f"14 days after {result.get('reference_date')}"
+    elif kind == "supplier_risk":
+        scope = supplier_label(task.get("supplier_id"))
+        period = f"Reference {result.get('reference_date')}"
+    elif kind == "what_if":
+        scope = f"{task.get('warehouse_id')} · demand +{task.get('increase_percent')}%"
+        period = f"Reference {result.get('reference_date')}"
+    else:
+        scope = "Task details unavailable"
+        period = f"Reference {result.get('reference_date', 'unknown')}"
+    recommendations = {}
+    for recommendation in result.get("recommendations") or []:
+        target_id = recommendation.get("target_id")
+        if target_id and target_id.startswith("supplier:"):
+            target_label = supplier_label(target_id.split(":", 1)[1])
+        elif target_id and target_id.startswith("position:"):
+            target_label = target_id.removeprefix("position:").replace(":", " / ")
+        else:
+            target_label = target_id or "Target unavailable"
+        recommendations[recommendation["id"]] = {
+            "target_id": target_id,
+            "target_label": target_label,
+        }
+    return {
+        "task_label": title,
+        "scope_label": scope,
+        "period_label": period,
+        "recommendations": recommendations,
+    }
+
+
 def verify_query(sql, parameters, rows, identity):
     if rows:
         verify_snapshot(sql, parameters, rows, identity)
@@ -178,6 +243,21 @@ class StateStore:
             con.execute("BEGIN")
             events = self._events(con)
             actions = self._projections(con, events)
+            expected = {
+                event["payload"]["analysis_id"]: event["payload"]["result_hash"]
+                for event in events
+                if event["event_type"] == "analysis_saved"
+            }
+            summaries = {}
+            for analysis_id, body, identity in con.execute(
+                "SELECT id,body,hash FROM analyses"
+            ).fetchall():
+                result = json.loads(body)
+                if identity != expected.get(analysis_id) or fingerprint(result) != identity:
+                    raise IntegrityFailure("History analysis snapshot verification failed")
+                summaries[analysis_id] = history_summary(result)
+            if set(summaries) != set(expected):
+                raise IntegrityFailure("History analysis snapshots are incomplete")
             return {
                 "verified": True,
                 "chain_verified": True,
@@ -188,6 +268,7 @@ class StateStore:
                 },
                 "events": events,
                 "actions": actions,
+                "summaries": summaries,
             }
 
     def _pack(self, con, evidence_id):

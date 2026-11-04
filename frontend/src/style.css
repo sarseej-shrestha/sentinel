@@ -942,10 +942,18 @@ blockquote {
   gap: 14px;
   font-size: 12px;
 }
-.event-row span {
+.event-row > span {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.event-description {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.event-description strong,
+.event-description small {
+  display: block;
 }
 .event-row button {
   font-size: 11px;

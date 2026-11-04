@@ -97,6 +97,7 @@ class History(StrictModel):
     head_hash: str
     events: list[dict[str, JsonValue]]
     actions: list[Action]
+    summaries: dict[str, dict[str, JsonValue]] = {}
 
 
 class Evidence(StrictModel):

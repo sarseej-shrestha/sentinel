@@ -108,6 +108,18 @@ export type History = {
   event_count: number;
   head_hash: string;
   actions: Action[];
+  summaries: Record<
+    string,
+    {
+      task_label: string;
+      scope_label: string;
+      period_label: string;
+      recommendations: Record<
+        string,
+        { target_id: string | null; target_label: string }
+      >;
+    }
+  >;
   events: {
     event_id: string;
     event_type: string;

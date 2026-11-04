@@ -22,6 +22,7 @@ def main():
             "unevaluable-supplier",
             "unevaluable-all",
             "stale-forecast",
+            "zero-forecast",
         ):
             rows = synthetic_records()
             if name == "missing-demand":
@@ -31,6 +32,11 @@ def main():
                     r
                     for r in rows["demand_daily"]
                     if r[2:4] != ("P1", "W3") or r[1] <= date(2026, 9, 23)
+                ]
+            elif name == "zero-forecast":
+                rows["demand_daily"] = [
+                    r[:4] + (0,) + r[5:] if r[2:4] == ("P1", "W3") else r
+                    for r in rows["demand_daily"]
                 ]
             else:
                 rows["shipments"] = [

@@ -200,8 +200,12 @@ function ForecastChart({
 }: {
   forecast: NonNullable<Analysis["forecast"]>;
 }) {
-  const points = forecast.points,
-    max = Math.max(...points.flatMap((p) => [p.forecast, p.baseline])) * 1.15;
+  const points = forecast.points;
+  const coincident = points.every((p) => p.forecast === p.baseline);
+  const allZero = coincident && points.every((p) => p.forecast === 0);
+  const max = allZero
+    ? 1
+    : Math.max(1, ...points.flatMap((p) => [p.forecast, p.baseline])) * 1.15;
   const x = (i: number) => 48 + (i * 520) / (points.length - 1),
     y = (v: number) => 200 - (v / max) * 150;
   const path = (key: "forecast" | "baseline") =>
@@ -218,6 +222,13 @@ function ForecastChart({
           Seasonal-naïve baseline
         </span>
       </div>
+      {coincident && (
+        <p className="fine">
+          {allZero
+            ? "Both series are zero throughout and overlap on the zero line."
+            : "The point forecast and seasonal baseline overlap at every date."}
+        </p>
+      )}
       <svg
         className="forecast-chart"
         viewBox="0 0 600 250"
@@ -237,7 +248,9 @@ function ForecastChart({
               className="grid-line"
             />
             <text x="8" y={y(t * max) + 4}>
-              {Math.round(t * max)}
+              {allZero
+                ? t.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
+                : Math.round(t * max)}
             </text>
           </g>
         ))}
@@ -341,18 +354,24 @@ function Dialog({
 function EvidenceDialog({
   id,
   targets,
+  reviewTargetId,
+  unresolvedReviewTarget,
   onClose,
 }: {
   id: string;
   targets: Target[];
+  reviewTargetId?: string | null;
+  unresolvedReviewTarget: boolean;
   onClose: () => void;
 }) {
   const [page, setPage] = useState<Evidence | null>(null),
     [offset, setOffset] = useState(0),
+    [requestSequence, setRequestSequence] = useState(0),
+    [loading, setLoading] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
-    setPage(null);
+    setLoading(true);
     setError("");
     api<Evidence>(
       `/evidence/${id}?offset=${offset}&limit=25`,
@@ -362,16 +381,27 @@ function EvidenceDialog({
       .then(setPage)
       .catch((e) => {
         if (e.name !== "AbortError") setError(e.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [id, offset]);
+  }, [id, offset, requestSequence]);
+  function requestPage(next: number) {
+    if (loading) return;
+    setOffset(next);
+    setRequestSequence((value) => value + 1);
+  }
   return (
     <Dialog title="Inspect source evidence" onClose={onClose}>
-      {error ? (
-        <Alert>{error}</Alert>
-      ) : !page ? (
+      {error && <Alert>{error}</Alert>}
+      {error && (
+        <button onClick={() => requestPage(offset)}>Retry evidence page</button>
+      )}
+      {loading && (
         <p role="status">Verifying the snapshot and retrieving source rows…</p>
-      ) : (
+      )}
+      {page && (
         <>
           <div className="verified">
             <ShieldCheck size={18} /> Snapshot integrity verified
@@ -392,23 +422,33 @@ function EvidenceDialog({
           />
           <div className="pagination">
             <button
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - 25))}
+              aria-disabled={loading || page.offset === 0}
+              onClick={() => {
+                if (page.offset > 0) requestPage(Math.max(0, page.offset - 25));
+              }}
             >
               <ChevronLeft size={16} /> Previous
             </button>
             <span aria-live="polite">
-              {page.total ? offset + 1 : 0}–{Math.min(offset + 25, page.total)}{" "}
-              of {page.total}
+              {page.total ? page.offset + 1 : 0}–
+              {Math.min(page.offset + 25, page.total)} of {page.total}
             </span>
             <button
-              disabled={offset + 25 >= page.total}
-              onClick={() => setOffset(offset + 25)}
+              aria-disabled={loading || page.offset + 25 >= page.total}
+              onClick={() => {
+                if (page.offset + 25 < page.total)
+                  requestPage(page.offset + 25);
+              }}
             >
               Next <ChevronRight size={16} />
             </button>
           </div>
-          <Sources evidenceId={id} targets={targets} />
+          <Sources
+            evidenceId={id}
+            targets={targets}
+            reviewTargetId={reviewTargetId}
+            unresolvedReviewTarget={unresolvedReviewTarget}
+          />
           <details>
             <summary>Provenance and query details</summary>
             <dl>
@@ -443,10 +483,12 @@ function Review({
   analysis,
   existing,
   onSaved,
+  onSelectionChange,
 }: {
   analysis: Analysis;
   existing?: Action;
   onSaved: () => void;
+  onSelectionChange: (id: string) => void;
 }) {
   const draftKey = existing?.id ?? analysis.analysis_id;
   const cached = readSession<{
@@ -457,7 +499,10 @@ function Review({
     retry?: { signature: string; key: string };
   } | null>("draft:" + draftKey, null);
   const [selected, setSelected] = useState(
-      cached?.selected ?? existing?.recommendation_id ?? "",
+      existing?.recommendation_id ??
+        cached?.action?.recommendation_id ??
+        cached?.selected ??
+        "",
     ),
     [text, setText] = useState(cached?.text ?? existing?.text ?? ""),
     [reviewer, setReviewer] = useState(
@@ -476,8 +521,18 @@ function Review({
   const retry = useRef<{ signature: string; key: string } | null>(
     cached?.retry ?? null,
   );
+  const pendingStatus = useRef<HTMLSpanElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
+  const focusAfterSave = useRef<"pending" | "retry" | null>(null);
   const final = action && action.state !== "pending";
   const dirty = !!action && text !== action.text;
+  useEffect(() => {
+    if (busy || !focusAfterSave.current) return;
+    if (focusAfterSave.current === "pending") pendingStatus.current?.focus();
+    else saveButton.current?.focus();
+    focusAfterSave.current = null;
+  }, [busy, action, error]);
+  useEffect(() => onSelectionChange(selected), [selected, onSelectionChange]);
   useEffect(() => {
     const value = { selected, text, reviewer, action, retry: retry.current };
     const ok = writeSession("draft:" + draftKey, value);
@@ -544,9 +599,11 @@ function Review({
       retry.current = null;
       onSaved();
       setConfirm(null);
+      if (!decision || decision === "edit") focusAfterSave.current = "pending";
     } catch (e) {
       setError((e as Error).message);
       if (e instanceof ApiError && e.status === 409) setConflict(true);
+      if (!decision) focusAfterSave.current = "retry";
     } finally {
       setBusy(false);
     }
@@ -596,6 +653,7 @@ function Review({
                 return;
               }
               setSelected(next);
+              onSelectionChange(next);
               setText(
                 analysis.recommendations.find((r) => r.id === next)?.text ?? "",
               );
@@ -649,6 +707,7 @@ function Review({
           <button
             onClick={() => {
               setSelected(pendingSelection);
+              onSelectionChange(pendingSelection);
               setText(
                 analysis.recommendations.find((r) => r.id === pendingSelection)
                   ?.text ?? "",
@@ -692,6 +751,7 @@ function Review({
         <div className="actions">
           {!action ? (
             <button
+              ref={saveButton}
               className="primary"
               disabled={busy || !selected || !text.trim() || !reviewer.trim()}
               onClick={() => submit()}
@@ -700,7 +760,14 @@ function Review({
             </button>
           ) : (
             <>
-              <span className="tag">Pending · revision {action.revision}</span>
+              <span
+                ref={pendingStatus}
+                className="tag"
+                role="status"
+                tabIndex={-1}
+              >
+                Pending · revision {action.revision}
+              </span>
               <button
                 disabled={busy || !dirty}
                 onClick={() => setDiscard(true)}
@@ -786,6 +853,7 @@ export default function App() {
     [historyError, setHistoryError] = useState(""),
     [historyLoading, setHistoryLoading] = useState(false),
     [existing, setExisting] = useState<Action | undefined>(),
+    [reviewSelection, setReviewSelection] = useState(""),
     [replay, setReplay] = useState(false);
   const sequence = useRef(0),
     controller = useRef<AbortController | null>(null),
@@ -817,6 +885,7 @@ export default function App() {
     setResult(null);
     setError("");
     setExisting(undefined);
+    setReviewSelection("");
     setReplay(false);
   }
   function choose(next: Kind) {
@@ -852,6 +921,7 @@ export default function App() {
     setError("");
     setResult(null);
     setExisting(undefined);
+    setReviewSelection("");
     setReplay(false);
     try {
       const next = await api<Analysis>(
@@ -882,6 +952,14 @@ export default function App() {
     try {
       const next = await api<Analysis>("/analyses/" + id);
       if (serial !== sequence.current) return;
+      if (
+        action &&
+        (action.analysis_id !== next.analysis_id ||
+          action.evidence_id !== next.evidence_id)
+      )
+        throw new Error(
+          "Saved review evidence does not match its verified analysis snapshot.",
+        );
       setResult(next);
       setExisting(action);
       setReplay(true);
@@ -932,6 +1010,14 @@ export default function App() {
     : error
       ? "error"
       : (result?.state ?? "initial");
+  const recommendationId = existing?.recommendation_id ?? reviewSelection;
+  const reviewTargetId = result?.recommendations.find(
+    (r) => r.id === recommendationId,
+  )?.target_id;
+  const unresolvedReviewTarget =
+    !!recommendationId &&
+    (!reviewTargetId ||
+      !result?.targets?.some((target) => target.id === reviewTargetId));
   const columns: Record<Kind, string[]> = {
     supplier_delay: [
       "supplier_id",
@@ -1091,27 +1177,43 @@ export default function App() {
                           selected recommendation to begin.
                         </p>
                       ) : (
-                        history.actions.map((a) => (
-                          <article className="history-item" key={a.id}>
-                            <div>
-                              <span
-                                className={`tag ${a.state === "pending" ? "amber-tag" : ""}`}
+                        history.actions.map((a) => {
+                          const summary = history.summaries[a.analysis_id];
+                          const target =
+                            summary?.recommendations[a.recommendation_id]
+                              ?.target_label ?? "Target unavailable";
+                          const state = a.state.replaceAll("_", " ");
+                          return (
+                            <article className="history-item" key={a.id}>
+                              <div>
+                                <span
+                                  className={`tag ${a.state === "pending" ? "amber-tag" : ""}`}
+                                >
+                                  {state}
+                                </span>
+                                <h3>{target} follow-up</h3>
+                                <p>
+                                  {summary?.task_label ?? "Saved analysis"} ·{" "}
+                                  {summary?.scope_label ?? "Scope unavailable"}{" "}
+                                  ·{" "}
+                                  {summary?.period_label ??
+                                    "Period unavailable"}
+                                </p>
+                                <p>{a.text}</p>
+                                <p>
+                                  {a.reviewer} · revision {a.revision} ·
+                                  simulated decision
+                                </p>
+                              </div>
+                              <button
+                                aria-label={`Open review · ${target} · ${summary?.task_label ?? "Saved analysis"} · ${summary?.period_label ?? "period unavailable"} · ${state}`}
+                                onClick={() => openSnapshot(a.analysis_id, a)}
                               >
-                                {a.state.replaceAll("_", " ")}
-                              </span>
-                              <h3>{a.text}</h3>
-                              <p>
-                                {a.reviewer} · revision {a.revision} · simulated
-                                decision
-                              </p>
-                            </div>
-                            <button
-                              onClick={() => openSnapshot(a.analysis_id, a)}
-                            >
-                              Open review <ArrowRight size={16} />
-                            </button>
-                          </article>
-                        ))
+                                Open review <ArrowRight size={16} />
+                              </button>
+                            </article>
+                          );
+                        })
                       )}
                     </section>
                     <section className="panel">
@@ -1119,21 +1221,32 @@ export default function App() {
                       {history.events
                         .filter((e) => e.event_type === "analysis_saved")
                         .reverse()
-                        .map((e) => (
-                          <div className="event-row" key={e.event_id}>
-                            <span>
-                              <FileSearch size={17} />
-                              {new Date(e.timestamp).toLocaleString()}
-                            </span>
-                            <button
-                              onClick={() =>
-                                openSnapshot(String(e.payload.analysis_id))
-                              }
-                            >
-                              Replay snapshot
-                            </button>
-                          </div>
-                        ))}
+                        .map((e) => {
+                          const analysisId = String(e.payload.analysis_id);
+                          const summary = history.summaries[analysisId];
+                          const description = summary
+                            ? `${summary.task_label} · ${summary.scope_label} · ${summary.period_label} · Reference ${analysisId.slice(0, 8)}`
+                            : `Saved analysis ${analysisId.slice(0, 8)} · details unavailable`;
+                          return (
+                            <div className="event-row" key={e.event_id}>
+                              <span>
+                                <FileSearch size={17} />
+                                <span className="event-description">
+                                  <strong>{description}</strong>
+                                  <small>
+                                    {new Date(e.timestamp).toLocaleString()}
+                                  </small>
+                                </span>
+                              </span>
+                              <button
+                                aria-label={`Replay snapshot · ${description}`}
+                                onClick={() => openSnapshot(analysisId)}
+                              >
+                                Replay snapshot
+                              </button>
+                            </div>
+                          );
+                        })}
                       {history.events
                         .filter((e) => e.event_type === "legacy_imported")
                         .map((e) => (
@@ -1567,6 +1680,7 @@ export default function App() {
                           analysis={result}
                           existing={existing}
                           onSaved={() => {}}
+                          onSelectionChange={setReviewSelection}
                         />
                       )}
                     </>
@@ -1588,6 +1702,8 @@ export default function App() {
         <EvidenceDialog
           id={evidence}
           targets={result?.targets ?? []}
+          reviewTargetId={reviewTargetId}
+          unresolvedReviewTarget={unresolvedReviewTarget}
           onClose={() => setEvidence(null)}
         />
       )}

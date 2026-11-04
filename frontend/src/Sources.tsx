@@ -34,21 +34,33 @@ type SourcePage = {
 export function Sources({
   evidenceId,
   targets,
+  reviewTargetId,
+  unresolvedReviewTarget,
 }: {
   evidenceId: string;
   targets: Target[];
+  reviewTargetId?: string | null;
+  unresolvedReviewTarget: boolean;
 }) {
-  const [target, setTarget] = useState(targets[0]?.id ?? ""),
+  const [target, setTarget] = useState(
+      reviewTargetId && targets.some((t) => t.id === reviewTargetId)
+        ? reviewTargetId
+        : unresolvedReviewTarget
+          ? ""
+          : (targets[0]?.id ?? ""),
+    ),
     [kind, setKind] = useState(
       target.startsWith("supplier:") ? "shipment" : "demand",
     ),
     [offset, setOffset] = useState(0),
+    [requestSequence, setRequestSequence] = useState(0),
     [page, setPage] = useState<SourcePage | null>(null),
+    [loading, setLoading] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
     if (!target) return;
     const abort = new AbortController();
-    setPage(null);
+    setLoading(true);
     setError("");
     api<SourcePage>(
       `/evidence/${evidenceId}/targets/${encodeURIComponent(target)}?kind=${kind}&offset=${offset}&limit=10`,
@@ -58,9 +70,17 @@ export function Sources({
       .then(setPage)
       .catch((e) => {
         if (e.name !== "AbortError") setError(e.message);
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setLoading(false);
       });
     return () => abort.abort();
-  }, [evidenceId, target, kind, offset]);
+  }, [evidenceId, target, kind, offset, requestSequence]);
+  function requestPage(next: number) {
+    if (loading) return;
+    setOffset(next);
+    setRequestSequence((value) => value + 1);
+  }
   if (!targets.length)
     return (
       <p>
@@ -71,18 +91,26 @@ export function Sources({
   return (
     <section aria-label="Transaction investigation">
       <h3>Investigate contributing records</h3>
+      {unresolvedReviewTarget && (
+        <p role="status">
+          The saved recommendation has no verifiable evidence target. Choose a
+          target explicitly before inspecting transactions.
+        </p>
+      )}
       <label>
         Evidence target
         <select
           value={target}
           onChange={(e) => {
             setTarget(e.target.value);
+            setPage(null);
             setKind(
               e.target.value.startsWith("supplier:") ? "shipment" : "demand",
             );
             setOffset(0);
           }}
         >
+          {!target && <option value="">Choose an evidence target</option>}
           {targets.map((t) => (
             <option key={t.id} value={t.id}>
               {t.label}
@@ -91,29 +119,33 @@ export function Sources({
           ))}
         </select>
       </label>
-      <label>
-        Record type
-        <select
-          value={kind}
-          onChange={(e) => {
-            setKind(e.target.value);
-            setOffset(0);
-          }}
-        >
-          {(target.startsWith("supplier:")
-            ? ["shipment", "supplier", "supplier_event"]
-            : ["demand", "inventory"]
-          ).map((k) => (
-            <option key={k} value={k}>
-              {k.replaceAll("_", " ")}
-            </option>
-          ))}
-        </select>
-      </label>
-      {error && <p role="alert">{error}</p>}
-      {!page && !error && (
-        <p role="status">Verifying captured transaction records…</p>
+      {target && (
+        <label>
+          Record type
+          <select
+            value={kind}
+            onChange={(e) => {
+              setKind(e.target.value);
+              setPage(null);
+              setOffset(0);
+            }}
+          >
+            {(target.startsWith("supplier:")
+              ? ["shipment", "supplier", "supplier_event"]
+              : ["demand", "inventory"]
+            ).map((k) => (
+              <option key={k} value={k}>
+                {k.replaceAll("_", " ")}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
+      {error && <p role="alert">{error}</p>}
+      {error && (
+        <button onClick={() => requestPage(offset)}>Retry source page</button>
+      )}
+      {loading && <p role="status">Verifying captured transaction records…</p>}
       {page && (
         <>
           <p>{page.message}</p>
@@ -138,6 +170,7 @@ export function Sources({
             tabIndex={0}
             role="region"
             aria-label="Captured transaction records"
+            aria-busy={loading}
           >
             <table>
               <caption className="sr-only">
@@ -208,18 +241,23 @@ export function Sources({
           )}
           <div className="pagination">
             <button
-              disabled={!offset}
-              onClick={() => setOffset(Math.max(0, offset - 10))}
+              aria-disabled={loading || page.offset === 0}
+              onClick={() => {
+                if (page.offset > 0) requestPage(Math.max(0, page.offset - 10));
+              }}
             >
               Previous source page
             </button>
             <span aria-live="polite">
-              Source records {page.total ? offset + 1 : 0}–
-              {Math.min(offset + 10, page.total)} of {page.total}
+              Source records {page.total ? page.offset + 1 : 0}–
+              {Math.min(page.offset + 10, page.total)} of {page.total}
             </span>
             <button
-              disabled={offset + 10 >= page.total}
-              onClick={() => setOffset(offset + 10)}
+              aria-disabled={loading || page.offset + 10 >= page.total}
+              onClick={() => {
+                if (page.offset + 10 < page.total)
+                  requestPage(page.offset + 10);
+              }}
             >
               Next source page
             </button>
