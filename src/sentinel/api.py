@@ -304,6 +304,8 @@ def create_app(database, state, static_dir=None):
     def preview_map(upload: Upload):
         result = preview(upload)
         result.pop("records", None)
+        if result.get("digest"):
+            result["chat_preview_id"] = chat.preview_receipt(result)
         return result
 
     @app.post("/api/imported-maps/confirm")

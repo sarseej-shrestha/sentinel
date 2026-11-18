@@ -26,6 +26,7 @@ import {
   type ChatCitation,
   type MapContext,
   type PublishedContext,
+  type WorkspaceAction,
 } from "./Chat";
 import { PublishedData } from "./PublishedData";
 import { MapWorkspace } from "./MapImport";
@@ -530,11 +531,13 @@ function Review({
   existing,
   onSaved,
   onSelectionChange,
+  proposedNote,
 }: {
   analysis: Analysis;
   existing?: Action;
   onSaved: () => void;
   onSelectionChange: (id: string) => void;
+  proposedNote?: string;
 }) {
   const draftKey = existing?.id ?? analysis.analysis_id;
   const cached = readSession<{
@@ -666,6 +669,25 @@ function Review({
         explicitly approve or reject it.
       </p>
       {error && <Alert>{error}</Alert>}
+      {proposedNote && !final && (
+        <div className="panel">
+          <p>Proposed assistant note</p>
+          <p>{proposedNote}</p>
+          <button
+            type="button"
+            disabled={busy || dirty}
+            onClick={() => setText(proposedNote)}
+          >
+            Use proposed wording
+          </button>
+          {dirty && (
+            <p>
+              Save or revert your current edits before applying the proposed
+              wording.
+            </p>
+          )}
+        </div>
+      )}
       {storageError && (
         <Alert>
           Browser session storage is unavailable. Keep this page open and save
@@ -917,6 +939,13 @@ export default function App() {
   );
   const [publishedContext, setPublishedContext] = useState<PublishedContext>();
   const [mapContext, setMapContext] = useState<MapContext>();
+  const [activeMap, setActiveMap] = useState("");
+  const [previewId, setPreviewId] = useState<string>();
+  const [mapCommand, setMapCommand] = useState<WorkspaceAction>();
+  const [assistantNote, setAssistantNote] = useState<{
+    id: string;
+    text: string;
+  }>();
   const [chatTarget, setChatTarget] = useState<string | null>();
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -1085,6 +1114,78 @@ export default function App() {
       if (serial === sequence.current) setLoading(false);
     }
   }
+  async function applyAssistantAction(action: WorkspaceAction) {
+    if (
+      action.kind === "theme" &&
+      (action.identity === "light" || action.identity === "dark")
+    ) {
+      setTheme(action.identity);
+      savePreference("sentinel-theme", action.identity);
+      return;
+    }
+    if (action.kind === "open_review" || action.kind === "draft_review") {
+      if (!action.identity || !/^[a-zA-Z0-9-]{1,100}$/.test(action.identity))
+        return;
+      const serial = sequence.current;
+      try {
+        const record = await api<Action>("/proposals/" + action.identity);
+        if (serial !== sequence.current) return;
+        const version =
+          action.kind === "draft_review"
+            ? `${record.evidence_id}:${record.revision}`
+            : record.evidence_id;
+        if (version !== action.version)
+          throw new Error(
+            "This review changed. Ask the assistant to check its latest revision.",
+          );
+        await openSnapshot(record.analysis_id, record);
+        setAssistantNote(
+          action.kind === "draft_review" && action.text
+            ? { id: record.id, text: action.text }
+            : undefined,
+        );
+      } catch (failure) {
+        if (serial === sequence.current) setError((failure as Error).message);
+      }
+      return;
+    }
+    if (
+      action.kind === "inspect_map" &&
+      (!action.record ||
+        ![
+          "supplier",
+          "warehouse",
+          "shipment",
+          "order",
+          "order_item",
+          "product",
+          "store",
+          "facility",
+          "customer",
+          "relationship",
+        ].includes(action.record.kind) ||
+        (action.record.map_id && !/^[a-f0-9]{24}$/.test(action.record.map_id)))
+    )
+      return;
+    if (
+      action.kind === "select_map" &&
+      !/^[a-f0-9]{24}$/.test(action.identity ?? "")
+    )
+      return;
+    if (
+      [
+        "inspect_map",
+        "open_import",
+        "select_map",
+        "fit_map",
+        "reset_map",
+      ].includes(action.kind)
+    ) {
+      setMapContext(undefined);
+      setMapCommand({ ...action });
+      setView("map");
+    }
+  }
   function select(
     name: "supplier_id" | "warehouse_id" | "product_id",
     title: string,
@@ -1211,7 +1312,11 @@ export default function App() {
             aria-label="Supply Chain Map"
             aria-current={view === "map" ? "page" : undefined}
             onClick={() => {
-              if (view !== "map") setMapContext(undefined);
+              if (view !== "map") {
+                setMapContext(undefined);
+                setMapCommand(undefined);
+                setPreviewId(undefined);
+              }
               setView("map");
             }}
           >
@@ -1305,6 +1410,9 @@ export default function App() {
           ) : view === "map" ? (
             <MapWorkspace
               onSource={setMapContext}
+              onMapChange={setActiveMap}
+              onPreview={setPreviewId}
+              command={mapCommand}
               datasetFingerprint={catalog?.dataset_fingerprint ?? "loading"}
             />
           ) : view === "history" ? (
@@ -1844,6 +1952,11 @@ export default function App() {
                           existing={existing}
                           onSaved={() => {}}
                           onSelectionChange={setReviewSelection}
+                          proposedNote={
+                            assistantNote && existing?.id === assistantNote.id
+                              ? assistantNote.text
+                              : undefined
+                          }
                         />
                       )}
                     </>
@@ -1864,6 +1977,9 @@ export default function App() {
       </div>
       <Chat
         workspace={view}
+        activeMap={view === "map" ? activeMap : undefined}
+        previewId={view === "map" ? previewId : undefined}
+        onAction={(action) => void applyAssistantAction(action)}
         contextLabel={
           view === "workspace" && result
             ? task.title

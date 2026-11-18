@@ -4,8 +4,11 @@ import asyncio
 import json
 import os
 import re
+import secrets
+from collections import OrderedDict
 from typing import Literal
 
+import duckdb
 import httpx
 from fastapi import HTTPException, Request
 from pydantic import Field, StringConstraints, ValidationError, model_validator
@@ -15,9 +18,11 @@ from typing_extensions import Annotated
 from sentinel.chat_context import (
     WORKSPACE_GUIDE,
     Citation,
+    Context,
     EvidenceArgs,
     MapContext,
     Scope,
+    WorkspaceAction,
     analysis_context,
     dataset_context,
     map_context,
@@ -30,6 +35,7 @@ from sentinel.published_contracts import (
     ShipmentContext,
 )
 from sentinel.tasks import StrictModel
+from sentinel.workspace_tools import REGISTRY, WorkspaceTools, tool_schema
 
 DEFAULT_MODEL = "qwen3:4b-instruct-2507-q4_K_M"
 Question = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=600)]
@@ -74,6 +80,12 @@ class HistoryTurn(StrictModel):
 
 class ChatRequest(StrictModel):
     message: Question
+    request_id: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$"
+    )
+    continuation: str | None = Field(default=None, max_length=80)
+    preview_id: str | None = Field(default=None, max_length=60)
+    active_map: str | None = Field(default=None, pattern=r"^(?:[0-9a-f]{24})?$")
     history: list[HistoryTurn] = Field(default_factory=list, max_length=4)
     workspace: Literal["workspace", "published", "map", "history"] = "workspace"
     analysis_id: str | None = Field(default=None, max_length=100)
@@ -106,6 +118,9 @@ class ChatResponse(StrictModel):
     verified: list[str]
     citations: list[Citation]
     notice: str | None = None
+    actions: list[WorkspaceAction] = Field(default_factory=list)
+    data_first: bool = False
+    continuation: str | None = None
 
 
 class InvalidReply(ValueError):
@@ -145,6 +160,15 @@ def response_parts(content, context, *, bound=False):
         raise InvalidReply(
             "The median is a predictive quantile, not necessarily the interval midpoint."
         )
+    if context.found_data and re.search(
+        r"\b(?:none|no (?:recorded |matching |additional |further )?(?:orders|warehouses|suppliers|shipments|products|records|results|data)|"
+        r"not addressed|not supported|cannot (?:retrieve|find|calculate|forecast)|could not be retrieved|no next page)\b",
+        prose,
+        re.I,
+    ):
+        raise InvalidReply(
+            "The verified tool found results. Describe how they were obtained instead of saying there are none."
+        )
     if context.scope.dataset and OVERDUE_CLAIM.search(prose):
         raise InvalidReply(
             "Do not claim no overdue orders exist. Their outstanding status cannot be determined."
@@ -166,6 +190,36 @@ def safe_general(content):
     return ""
 
 
+def follow_up_options(context):
+    if context.scope.label == "Current import preview":
+        return ["review the import template", "open the import preview"]
+    if any(action.kind == "draft_review" for action in context.actions):
+        return ["inspect the captured evidence", "review the proposed note"]
+    if any(action.kind == "open_review" for action in context.actions):
+        return ["open the matching review", "inspect the captured evidence"]
+    if context.carry and context.carry.get("more"):
+        return ["see the next page", "inspect a supporting record"]
+    if context.carry and context.carry.get("kind") in {"analysis", "published"}:
+        return ["discuss the calculation method", "explain the limits of the result"]
+    if context.actions:
+        return (
+            ["use the available workspace action", "check the supporting source"]
+            if context.found_data
+            else ["use the available workspace action"]
+        )
+    return ["clarify your request", "explain the supported inputs"]
+
+
+def validate_follow_up(content, context):
+    # Tool facts are rendered verbatim by Sentinel. Free prose about them could
+    # contradict those facts, even if every reference and number parsed.
+    value = content.strip()
+    match = re.fullmatch(r"Would you like to ([a-z ]+)[?]", value, re.I)
+    if not match or match[1].strip().casefold() not in follow_up_options(context):
+        raise InvalidReply("Write one follow-up question using a listed next step exactly.")
+    return value
+
+
 class Chat:
     def __init__(self):
         self.endpoint = os.getenv("SENTINEL_QWEN_URL")
@@ -173,10 +227,82 @@ class Chat:
         self.token = os.getenv("SENTINEL_QWEN_TOKEN")
         self.tools = os.getenv("SENTINEL_QWEN_TOOLS", "1") == "1"
         self.slots = asyncio.Semaphore(1)
+        self.continuations = OrderedDict()
+        self.previews = OrderedDict()
+
+    def scope_key(self, body):
+        return (
+            body.workspace,
+            body.preview_id,
+            body.active_map,
+            body.analysis_id,
+            body.target_id,
+            body.published.model_dump_json() if body.published else None,
+            body.map_record.model_dump_json() if body.map_record else None,
+        )
+
+    def remember(self, body, carry):
+        key = secrets.token_urlsafe(20)
+        self.continuations[key] = (self.scope_key(body), carry)
+        if len(self.continuations) > 128:
+            self.continuations.popitem(last=False)
+        return key
+
+    def preview_receipt(self, result):
+        token = secrets.token_urlsafe(18)
+        graph = result.get("graph", {})
+        self.previews[token] = (
+            result.get("accepted", 0),
+            len(graph.get("nodes", [])),
+            len(graph.get("edges", [])),
+            [(item["row"], item["reason"]) for item in result.get("rejected", [])],
+        )
+        if len(self.previews) > 64:
+            self.previews.popitem(last=False)
+        return token
+
+    def import_context(self, token):
+        context = Context(Scope(label="Current import preview"))
+        context.tool_result = True
+        record = self.previews.get(token)
+        if not record:
+            context.add(
+                "This preview is no longer available. Validate the file again in the import panel."
+            )
+        else:
+            accepted, nodes, edges, rejected = record
+            context.add(
+                f"Current preview: {accepted} accepted rows, {len(rejected)} rejected rows, {nodes} proposed nodes and {edges} proposed relationships.",
+                model_text="The preview contains verified counts and is not yet saved.",
+            )
+            for row, reason in rejected[:10]:
+                context.add(f"Row {row} · {reason}", model_text=reason)
+            if len(rejected) > 10:
+                context.add(
+                    "The import preview shows the remaining row errors.",
+                    model_text="Only a subset of errors is shown here.",
+                )
+        return context
 
     async def complete(self, client, body, context, *, offer_tool=False, repair=None):
         system = SYSTEM + "\nSentinel workspace guide:\n" + WORKSPACE_GUIDE
-        current = DATA_VALUE.sub("[record ID]", context.scope.label)
+        current = (
+            "verified workspace tool result"
+            if context.tool_result
+            else DATA_VALUE.sub("[record ID]", context.scope.label)
+        )
+        if offer_tool:
+            system += (
+                "\nUse workspace tools for requests about Sentinel records, relationships, saved reviews, or explicit calculations. "
+                "Look up the entity even if nothing is selected. Use the user's exact entity label or ID. "
+                "Do not guess dates or silently drop filters. For requested dates or what-if changes, use only user-supplied values."
+            )
+        if context.tool_result:
+            system += (
+                "\nA validated workspace tool already answered. Lead with the meaning of the verified results or the exact clarification needed. "
+                "Do not tell the user to navigate to obtain results already shown. The application handles numbers, IDs, paths and actions. "
+                "If the details show zero matches or ambiguity, say so. Do not invent records, actions or conclusions."
+            )
         system += "\nCurrent workspace context: " + current
         if re.search(
             r"\b(save|saved|revisit|replay|history|review)\b", body.message, re.I
@@ -233,27 +359,51 @@ class Chat:
                 + " Write a fresh plain-text answer. Use only the listed handles. Leave out unsupported claims. "
                 "If relevant, put useful standalone conceptual advice in a paragraph beginning General guidance:."
             )
-        messages = [{"role": "system", "content": system}]
-        for turn in body.history:
-            messages.extend(
-                [
-                    {"role": "user", "content": turn.question},
-                    {"role": "assistant", "content": turn.answer},
-                ]
+        if context.tool_result:
+            choices = "; ".join(follow_up_options(context))
+            system = (
+                "Sentinel has already rendered its verified application result. "
+                "Write one optional follow-up question. Do not summarize the data or describe the tool result. "
+                "Use the format 'Would you like to <one listed next step>?' with an exact next step. "
+                "Choose the most relevant one based on the user's question. Next steps: " + choices
             )
-        messages.append({"role": "user", "content": body.message})
+            if repair:
+                system += (
+                    " Your last reply did not follow the question format. Write only the question."
+                )
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": body.message},
+            ]
+        else:
+            messages = [{"role": "system", "content": system}]
+            for turn in body.history:
+                messages.extend(
+                    [
+                        {"role": "user", "content": turn.question},
+                        {"role": "assistant", "content": turn.answer},
+                    ]
+                )
+            messages.append({"role": "user", "content": body.message})
         params = {"model": self.model, "messages": messages, "max_tokens": 420, "temperature": 0}
         if offer_tool:
-            params["tools"] = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "captured_records",
-                        "description": "Read up to four captured transaction examples for the current saved target and evidence version.",
-                        "parameters": EvidenceArgs.model_json_schema(),
-                    },
-                }
-            ]
+            schemas = (
+                [
+                    tool_schema(
+                        "captured_records",
+                        EvidenceArgs,
+                        "Read one bounded captured evidence page for the current verified target.",
+                    )
+                ]
+                if context.scope.target_id and context.scope.source_id
+                else []
+            )
+            if not body.analysis_id or body.request_id:
+                schemas.extend(
+                    tool_schema(name, model, description)
+                    for name, (model, description) in REGISTRY.items()
+                )
+            params["tools"] = schemas
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
         response = await client.post(self.endpoint, headers=headers, json=params)
         response.raise_for_status()
@@ -273,16 +423,16 @@ class Chat:
             if not isinstance(calls, list) or len(calls) != 1:
                 raise ValueError
             function = calls[0]["function"]
-            if function["name"] != "captured_records":
-                raise ValueError
+            name = function["name"]
+            model = EvidenceArgs if name == "captured_records" else REGISTRY[name][0]
             args = function["arguments"]
-            return EvidenceArgs.model_validate(json.loads(args) if isinstance(args, str) else args)
+            return name, model.model_validate(json.loads(args) if isinstance(args, str) else args)
         except (TypeError, KeyError, ValueError, ValidationError):
             raise InvalidReply(
-                "The evidence tool request was incomplete, malformed or outside the allowed scope."
+                "The workspace tool request was malformed or outside the allowed scope."
             ) from None
 
-    async def converse(self, body, context, service):
+    async def converse(self, body, context, service, executor=None):
         if not self.endpoint:
             raise HTTPException(
                 503,
@@ -292,7 +442,11 @@ class Chat:
         if context.scope.analysis_id and RECORD_QUESTION.search(body.message):
             await run_in_threadpool(context.source_page, service.store, EvidenceArgs())
             retrieved = True
-        allow_tool = self.tools and bool(context.scope.target_id and context.scope.source_id)
+        allow_tool = (
+            self.tools
+            and not context.tool_result
+            and bool(executor or (context.scope.target_id and context.scope.source_id))
+        )
         try:
             async with asyncio.timeout(65):
                 async with self.slots, httpx.AsyncClient(timeout=30, trust_env=False) as client:
@@ -303,6 +457,8 @@ class Chat:
                         and not GENERAL_QUESTION.search(body.message)
                     )
                     default_handles = context.relevant(body.message, bound)
+                    if context.tool_result:
+                        default_handles = list(context.facts)
                     fallback_handles = []
                     content = ""
                     # One retrieval plus one repair at most. Each pass yields either a
@@ -323,8 +479,23 @@ class Chat:
                                     raise InvalidReply(
                                         "The requested tool is outside this answer's allowed scope."
                                     )
-                                args = self.tool_args(result)
-                                await run_in_threadpool(context.source_page, service.store, args)
+                                name, args = self.tool_args(result)
+                                if name == "captured_records":
+                                    if not context.scope.target_id or not context.scope.source_id:
+                                        raise InvalidReply(
+                                            "Select a verified captured target before requesting records."
+                                        )
+                                    await run_in_threadpool(
+                                        context.source_page, service.store, args
+                                    )
+                                elif executor:
+                                    context = await run_in_threadpool(executor.execute, name, args)
+                                    bound = True
+                                    default_handles = list(context.facts)
+                                else:
+                                    raise InvalidReply(
+                                        "The requested workspace tool is unavailable in this scope."
+                                    )
                                 retrieved = True
                                 continue
                             content = result.get("content")
@@ -341,17 +512,26 @@ class Chat:
                                 for handle in HANDLE.findall(content)
                                 if handle in context.facts
                             ]
+                            if context.tool_result:
+                                return self.render(
+                                    context,
+                                    validate_follow_up(content, context),
+                                    default_handles,
+                                    body=body,
+                                )
                             prose, handles = response_parts(content, context, bound=bound)
                             handles = list(dict.fromkeys([*handles, *default_handles]))
                             if retrieved and context.facts and not context.notice:
                                 handles.append(list(context.facts)[-1])
                             if context.notice:
                                 prose = f"{context.notice}\n\n{prose}"
-                            return self.render(context, prose, handles)
+                            return self.render(context, prose, handles, body=body)
                         except InvalidReply as exc:
                             if repair:
                                 break
                             repair = str(exc)
+                    if context.tool_result:
+                        return self.render(context, "", default_handles, body=body)
                     # Discard the unverified answer. Preserve standalone general advice and
                     # registry-backed details independently of what the model asserted.
                     partial = safe_general(content) if isinstance(content, str) else ""
@@ -364,6 +544,7 @@ class Chat:
                         or "I couldn’t verify the full response. Ask a narrower question or inspect the selected source.",
                         handles,
                         "Qwen could not verify part of this reply. Only verified source details are shown below.",
+                        body=body,
                     )
         except (TimeoutError, httpx.TimeoutException):
             raise HTTPException(
@@ -374,7 +555,7 @@ class Chat:
                 503, "Qwen is unavailable. Check that the configured model is running, then retry."
             ) from None
 
-    def render(self, context, answer, handles, notice=None):
+    def render(self, context, answer, handles, notice=None, *, body=None):
         selected = [context.facts[key] for key in dict.fromkeys(handles) if key in context.facts]
         citations = []
         for fact in selected:
@@ -387,6 +568,9 @@ class Chat:
             verified=[fact.text for fact in selected],
             citations=citations,
             notice=notice,
+            actions=context.actions[:8],
+            data_first=context.tool_result,
+            continuation=self.remember(body, context.carry) if body and context.carry else None,
         )
 
     async def respond(self, body, service, published, imported_maps, request: Request):
@@ -400,13 +584,51 @@ class Chat:
             )
         else:
             context = dataset_context(published, body.workspace)
-        task = asyncio.create_task(self.converse(body, context, service))
+        previous = self.continuations.get(body.continuation)
+        carry = previous[1] if previous and previous[0] == self.scope_key(body) else None
+        executor = WorkspaceTools(service, published, imported_maps, body, carry)
+        # Existing selected-evidence clients retain their narrow captured-page contract.
+        tools = (
+            executor
+            if body.request_id or not (body.analysis_id or body.published or body.map_record)
+            else None
+        )
+
+        async def run():
+            if (
+                body.preview_id
+                and body.workspace == "map"
+                and re.search(
+                    r"\b(preview|error|errors|rejected|row|rows|formula|import)\b",
+                    body.message,
+                    re.I,
+                )
+            ):
+                chosen = self.import_context(body.preview_id)
+            else:
+                chosen = (
+                    await run_in_threadpool(executor.infer) if tools and self.endpoint else None
+                )
+            if chosen is None:
+                chosen = context
+            result = await self.converse(body, chosen, service, tools)
+            if not result.continuation and carry:
+                result.continuation = self.remember(body, carry)
+            return result
+
+        task = asyncio.create_task(run())
         try:
             while not task.done():
                 if await request.is_disconnected():
                     raise HTTPException(499, "Message cancelled.")
                 await asyncio.wait({task}, timeout=0.2)
-            return task.result()
+            try:
+                return task.result()
+            except duckdb.Error:
+                raise HTTPException(
+                    503,
+                    "Sentinel could not read the workspace data. Verify the fixture is available and retry.",
+                ) from None
         finally:
             if not task.done():
                 task.cancel()

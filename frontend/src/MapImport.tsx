@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { MapContext } from "./Chat";
+import type { MapContext, WorkspaceAction } from "./Chat";
 import { SupplyChainMap } from "./SupplyChainMap";
 
 type SavedMap = { id: string; name: string };
 type Upload = { filename: string; data: string; worksheet?: string };
 type Preview = {
+  chat_preview_id?: string;
   worksheets: string[];
   worksheet?: string;
   digest?: string;
@@ -27,16 +28,28 @@ const example =
 const download = (content: string) =>
   "data:text/csv;charset=utf-8," + encodeURIComponent(content + "\n");
 
+function requestedMap(command?: WorkspaceAction) {
+  if (command?.kind === "select_map") return command.identity ?? "";
+  if (command?.kind === "inspect_map") return command.record?.map_id ?? "";
+  return undefined;
+}
+
 export function MapWorkspace({
   datasetFingerprint,
   onSource,
+  onMapChange,
+  onPreview,
+  command,
 }: {
   datasetFingerprint: string;
   onSource: (record?: MapContext) => void;
+  onMapChange: (identity: string) => void;
+  onPreview: (token?: string) => void;
+  command?: WorkspaceAction;
 }) {
   const selector = useRef<HTMLSelectElement>(null);
   const [maps, setMaps] = useState<SavedMap[]>([]);
-  const [active, setActive] = useState("");
+  const [active, setActive] = useState(() => requestedMap(command) ?? "");
   const [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
@@ -47,6 +60,14 @@ export function MapWorkspace({
       });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    const map = requestedMap(command);
+    if (map !== undefined) setActive(map);
+  }, [command]);
+  useEffect(() => {
+    onMapChange(active);
+  }, [active, onMapChange]);
 
   return (
     <>
@@ -76,6 +97,8 @@ export function MapWorkspace({
           </p>
         )}
         <MapImport
+          command={command}
+          onPreview={onPreview}
           onSaved={(saved) => {
             setMaps((current) =>
               [...current.filter(({ id }) => id !== saved.id), saved].sort(
@@ -94,14 +117,28 @@ export function MapWorkspace({
         importedName={maps.find(({ id }) => id === active)?.name}
         endpoint={active ? "/imported-maps/" + active : "/map"}
         onSource={onSource}
+        command={
+          requestedMap(command) === undefined ||
+          requestedMap(command) === active
+            ? command
+            : undefined
+        }
       />
     </>
   );
 }
 
-function MapImport({ onSaved }: { onSaved: (saved: SavedMap) => void }) {
+function MapImport({
+  onSaved,
+  command,
+  onPreview,
+}: {
+  onSaved: (saved: SavedMap) => void;
+  command?: WorkspaceAction;
+  onPreview: (token?: string) => void;
+}) {
   const importButton = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(command?.kind === "open_import");
   const [file, setFile] = useState<File>();
   const [upload, setUpload] = useState<Upload>();
   const [worksheet, setWorksheet] = useState("");
@@ -109,6 +146,16 @@ function MapImport({ onSaved }: { onSaved: (saved: SavedMap) => void }) {
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (command?.kind === "open_import") {
+      setOpen(true);
+      importButton.current?.focus();
+    }
+  }, [command]);
+  useEffect(() => {
+    onPreview(preview?.chat_preview_id);
+  }, [preview?.chat_preview_id, onPreview]);
 
   function clear() {
     setOpen(false);

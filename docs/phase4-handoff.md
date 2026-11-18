@@ -77,6 +77,45 @@ The published sources are independent of each other and of the synthetic workspa
 
 **Optional file-to-map:** use Supply Chain Map → Import relationships. Download the CSV template or example, select a CSV or XLSX up to 96 KiB and 40 relationship rows, and choose a worksheet when requested. Preview shows accepted and rejected row counts, numbered errors, example rows and proposed node and wire counts. Name the map and confirm the accepted rows. Identical confirmation is idempotent. The selector and source inspector expose persisted maps and contributing CSV/workbook rows. Imports live in a separate local SQLite file beside the workspace state. The import validates relationship structure and does not train models.
 
+## Workspace assistant capabilities
+
+The workspace assistant continues from `cfb0dde`. That revision reproduced a specific gap on real Qwen. With no active analysis, the only retrieval tool was unavailable, so the model told the user to navigate to a map for “what orders and warehouses are associated with supplier B.” The new workspace tools use application services even when chat opens in Workspace help.
+
+| Capability | Service and effect |
+| --- | --- |
+| Entity lookup, record summaries and paths | Read-only fixture graph from the same canonical tables and relationship fields as the Supply Chain Map, plus registry aliases. Imported maps use their persisted graph and source rows. Exact matches win over substring candidates. Cross-map collisions list the matching scopes. |
+| Listings, totals and follow-ups | Exact distinct counts over supported paths, before pagination. Stable ID order and up to ten results per type. Promised dates for fixture shipment paths and imported event dates for upload paths. Fixture paths follow explicit schema relationships. Imported traversal stops at three edges. |
+| Fixture calculations | Existing validated `Task`, `Application`, query guards, model and evidence capture. An explicit chat invocation saves one verified snapshot. The request identity prevents duplicates or silently remapping a retry to a different task. |
+| Published calculations | Existing forecast, coverage, what-if, observed vendor lateness, and research-only model evaluation. Calculations are read-only and use the historical retail or SCMS scopes. |
+| History, reviews and notes | Existing integrity-checked StateStore. Saved reviews include state, captured evidence, reviewer, revision, and timestamp when available. Imported notes include source rows and supplied event dates. Stored note text is shown separately from model prose. |
+| Draft a saved review note | Prepare wording from verified captured facts for one pending review. The action opens the exact evidence version and revision. Use proposed wording in the review form and explicitly save the edit. Existing retry and stale-revision checks apply. |
+| Import assistance | Existing CSV/XLSX preview and confirmation. The current preview receipt allows chat to explain verified counts and numbered errors. Stored maps become searchable after confirming import. The assistant can open the existing dialog and template. |
+| Workspace controls | Server-supplied, frontend-allowlisted actions for map record inspection, imported map selection, review opening, import, theme, and map fit/reset. Links and action parameters are supplied by Sentinel. |
+
+The assistant carries a bounded, server-owned continuation for pagination, ordinal record selection, and analysis follow-ups. It is associated with the original view, map and evidence selection. Changing scope discards incompatible continuations. “Another ten percent” asks whether you mean a change relative to the original demand or relative to the prior scenario.
+
+Qwen proposes typed tool requests and handles ordinary conversation. For tool-backed questions Sentinel renders the exact result first. Qwen can add a validated next-step question. An unsupported generated assertion cannot override the result cards. Tools execute at most once per answer, with one repair for an invalid request or reference. Source snippets and preview receipts are bounded. A cross-map lookup searches at most sixteen imported maps and reports when the result is partial. Select a particular map to search it directly. Imported note text and free-text review notes are withheld from the model.
+
+Unsupported operations include outstanding-order inference, arbitrary joins or SQL, retrospective fixture calculation against an unmatched dataset version, automatic procurement, adding a separate entity-notes system, and rename/delete of confirmed maps. SCMS line items do not have a verified order or warehouse entity graph. Coverage runs with the supported explicit threshold or published store/product inputs. Whole-warehouse stock ranking and arbitrary multiple-supplier comparisons remain outside this implementation. The current import panel remains the file selection and explicit confirmation surface.
+
+For example, **Supplier B (S2)** has **180 distinct orders** and **one destination warehouse, Warehouse 2 (W2)**, via recorded shipment paths in the synthetic fixture. An independent DuckDB query found promised dates from **2026-04-01 through 2026-09-27**. The first page begins with O1, O10 and O100. Source record SH1 supports both the W2 destination and the O1 order link.
+
+The [workspace assistant live report](phase4-workspace-live.json) records 24 real-API scenarios, imported lookup after a full process restart, and the live Chromium checks. The browser checked Qwen outage recovery, stale context, cancellation, controlled reference/tool faults, Supplier B evidence, explicitly confirmed draft saves and failed-save retry, import navigation, and 200% zoom with scoped axe. Fixture counts and path samples were independently compared with DuckDB. The final full checks passed 774 Python and 33 Chromium tests. Rename/delete is inapplicable because confirmed maps provide neither operation.
+
+Run the live evaluation against a fresh disposable server:
+
+```sh
+set -a
+. ./.env.example
+set +a
+.venv/bin/python -m sentinel.web --init --data-dir /tmp/sentinel-workspace-acceptance --port 8773
+```
+
+```sh
+.venv/bin/python -m scripts.evaluate_workspace_assistant --database /tmp/sentinel-workspace-acceptance/analytics.duckdb
+node frontend/scripts/phase4-live.mjs
+```
+
 ## Data and evaluation
 
 The [committed evaluation manifest](phase4-evaluation.json) contains the source URLs, filenames, exact checksums, licenses, input schemas, mappings, observation dates, import dispositions, split counts, per-horizon forecast metrics and model results. Source row identifiers are one-based CSV record ordinals including the header. The local bundle preserves accepted identifiers and its exclusion index lists rejected identifiers by reason.

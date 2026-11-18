@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { api } from "./api";
-import type { MapContext } from "./Chat";
+import type { MapContext, WorkspaceAction } from "./Chat";
 
 type MapNode = {
   id: string;
@@ -38,11 +44,13 @@ export function SupplyChainMap({
   onSource,
   endpoint,
   importedName,
+  command,
 }: {
   datasetFingerprint: string;
   onSource: (record?: MapContext) => void;
   endpoint: string;
   importedName?: string;
+  command?: WorkspaceAction;
 }) {
   const storageKey = "sentinel-map-v1:" + datasetFingerprint;
   const stage = useRef<HTMLDivElement>(null);
@@ -309,6 +317,36 @@ export function SupplyChainMap({
       setWarning((error as Error).message);
     }
   }
+  function resetMapZoom() {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }
+
+  const runCommand = useEffectEvent(async (action: WorkspaceAction) => {
+    if (action.kind === "fit_map") {
+      fit();
+    } else if (action.kind === "reset_map") {
+      resetMapZoom();
+    } else if (action.kind === "inspect_map" && action.record) {
+      const { kind, record_id } = action.record;
+      const identity = `${kind}:${record_id}`;
+      if (kind === "relationship") {
+        setSelected({ type: "edge", id: record_id });
+      } else {
+        const selected = nodes.find((node) => node.id === identity);
+        const request = ++inspected.current;
+        if (!selected && !importedName)
+          await expand({ kind, record_id } as MapNode);
+        if (request !== inspected.current) return;
+        setSelected({ type: "node", id: identity });
+      }
+      await inspect(kind, record_id);
+    }
+  });
+  useEffect(() => {
+    if (ready && command) void runCommand(command);
+  }, [ready, command, runCommand]);
+
   function move(event: React.PointerEvent<HTMLDivElement>) {
     if (wiring) {
       const bounds = stage.current!.getBoundingClientRect();
@@ -370,14 +408,7 @@ export function SupplyChainMap({
         <button onClick={() => zoomBy(0.15)} aria-label="Zoom in">
           +
         </button>
-        <button
-          onClick={() => {
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
-          }}
-        >
-          Reset map zoom
-        </button>
+        <button onClick={resetMapZoom}>Reset map zoom</button>
         <button onClick={fit}>Fit view</button>
         <button
           onClick={() => setListOpen((value) => !value)}

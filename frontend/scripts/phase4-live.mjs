@@ -297,6 +297,80 @@ try {
     "The real Qwen reference opened the original Supplier B target in captured evidence.",
   );
 
+  const proposal = await fetch(base + "/api/proposals", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      key: "workspace-assistant-smoke",
+      analysis_id: saved.analysis_id,
+      recommendation_id: saved.recommendations[0].id,
+      reviewer: "Live fixture reviewer",
+      text: "Inspect the saved records.",
+    }),
+  }).then((response) => response.json());
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "Ask Qwen" }).click();
+  await message.fill("Draft a note for the saved Supplier B review.");
+  await page.getByRole("button", { name: "Send message" }).click();
+  const useDraft = page.getByRole("button", {
+    name: "Use proposed note in existing review",
+  });
+  await expect(useDraft).toBeVisible({ timeout: 50000 });
+  await useDraft.click();
+  await expect(page.getByText("Proposed assistant note")).toBeVisible();
+  const note = page.getByLabel("Review note");
+  await expect(note).toHaveValue("Inspect the saved records.");
+  await page.getByRole("button", { name: "Use proposed wording" }).click();
+  await expect(note).toHaveValue(/7 late of 31/);
+  const proposed = await note.inputValue();
+  const beforeSave = await fetch(base + "/api/proposals/" + proposal.id).then(
+    (response) => response.json(),
+  );
+  assert.equal(beforeSave.revision, 1);
+  await page.route(
+    "**/api/proposals/*/decisions",
+    (route) =>
+      route.fulfill({
+        status: 503,
+        json: { detail: "Injected save failure" },
+      }),
+    { times: 1 },
+  );
+  const saveEdits = page.getByRole("button", {
+    name: "Save edits",
+    exact: true,
+  });
+  await saveEdits.click();
+  await expect(page.getByText("Injected save failure")).toBeVisible();
+  await expect(note).toHaveValue(proposed);
+  await saveEdits.click();
+  await expect(page.getByText(/Pending · revision 2/)).toBeVisible();
+  const afterSave = await fetch(base + "/api/proposals/" + proposal.id).then(
+    (response) => response.json(),
+  );
+  assert.equal(afterSave.text, proposed);
+  console.log(
+    "Draft proposal, explicit save, failed-save preservation, and retry passed against the existing review service.",
+  );
+
+  await page.getByRole("button", { name: "Ask Qwen" }).click();
+  await message.fill("Open the spreadsheet import dialog");
+  await page.getByRole("button", { name: "Send message" }).click();
+  const openImport = page.getByRole("button", {
+    name: "Open import",
+    exact: true,
+  });
+  await expect(openImport).toBeVisible({ timeout: 50000 });
+  await openImport.click();
+  await expect(page.getByLabel("Relationship file")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Download blank template" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel import" }).click();
+  console.log(
+    "A validated Qwen action opened the existing import flow and template.",
+  );
+
   const worker =
     context.serviceWorkers()[0] ??
     (await context.waitForEvent("serviceworker"));

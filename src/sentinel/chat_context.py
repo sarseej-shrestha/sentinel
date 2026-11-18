@@ -83,6 +83,24 @@ class Scope(StrictModel):
     source_id: str | None = None
 
 
+class WorkspaceAction(StrictModel):
+    kind: Literal[
+        "inspect_map",
+        "open_review",
+        "open_import",
+        "select_map",
+        "theme",
+        "fit_map",
+        "reset_map",
+        "draft_review",
+    ]
+    label: str
+    record: MapContext | None = None
+    identity: str | None = None
+    text: str | None = None
+    version: str | None = None
+
+
 class Citation(StrictModel):
     label: str
     scope: Scope
@@ -108,6 +126,10 @@ class Context:
     facts: dict[str, Fact] = field(default_factory=dict)
     targets: list[dict] = field(default_factory=list)
     notice: str = ""
+    actions: list[WorkspaceAction] = field(default_factory=list)
+    carry: dict | None = None
+    tool_result: bool = False
+    found_data: bool = False
 
     def add(self, text, citation=None, *, topic="summary", model_text=None):
         self.facts[f"F{len(self.facts) + 1}"] = Fact(text, citation, topic, model_text)
@@ -120,6 +142,7 @@ class Context:
             (r"baseline|compare|different", ("first_day", "evaluation")),
             (r"trust|accuracy|performance|reliable", ("evaluation", "limits")),
             (r"outstanding|overdue|receipts", ("limits",)),
+            (r"excluded|unevaluable|stale|missing", ("quality", "limits")),
             (r"records behind|show .*records|transaction", ("records", "summary")),
             (r"where.*from|source|provenance|origin|license", ("provenance", "records", "summary")),
             (r"connections|linked", ("connections", "provenance")),
@@ -344,6 +367,21 @@ def analysis_context(service, identity, target_id):
                 ref,
                 model_text=f"The aggregate shows late and evaluable delivery counts for {name or 'the selected supplier'}, with exclusions and unassignable dates accounted for.",
             )
+    population = (snap.get("quality") or {}).get("entities") or {}
+    if population:
+        ctx.add(
+            f"Captured population quality: {population.get('assessed', 0)} assessed, {population.get('matching', 0)} matching, and {population.get('unevaluable', 0)} unevaluable.",
+            ref,
+            topic="quality",
+            model_text="The verified snapshot accounts for assessed, matching, and unevaluable populations.",
+        )
+    for item in [target] if target else targets[:5]:
+        if item.get("reasons"):
+            ctx.add(
+                f"{item['label']} quality reasons: " + "; ".join(item["reasons"]),
+                ref,
+                topic="quality",
+            )
     if kind in {"supplier_delay", "supplier_risk"}:
         ctx.add(
             "These are observed deliveries. The shipment data has no open or cancelled status or receipt quantities. Missing delivered dates do not establish outstanding overdue orders. Purchase orders are not linked to receipts.",
@@ -453,6 +491,33 @@ def map_context(service, imported_maps, selected):
             ref,
             topic="timing",
             model_text="This fixture shipment has both recorded promised and delivered dates, which can be inspected and compared. Do not infer order receipt quantities or an outstanding order status.",
+        )
+    summaries = {
+        "order": (
+            ("order_date", "order date"),
+            ("warehouse_id", "recorded warehouse"),
+            ("status", "recorded order status"),
+        ),
+        "supplier": (("supplier_name", "supplier"), ("lead_time_days", "listed lead time in days")),
+        "warehouse": (("warehouse_name", "warehouse"),),
+        "product": (("product_name", "product"), ("supplier_id", "listed supplier")),
+        "order_item": (
+            ("order_id", "order"),
+            ("product_id", "product"),
+            ("quantity", "line quantity"),
+        ),
+    }
+    fields = [
+        f"{label} {row[key]}"
+        for key, label in summaries.get(selected.kind, ())
+        if row.get(key) is not None
+    ]
+    if fields:
+        ctx.add(
+            f"{selected.kind.replace('_', ' ').capitalize()} {selected.record_id}: "
+            + "; ".join(fields)
+            + ".",
+            ref,
         )
     ctx.add(
         "Solid wires represent recorded fixture relationships. Dashed exploratory wires are workspace annotations.",

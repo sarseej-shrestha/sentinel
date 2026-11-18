@@ -364,8 +364,16 @@ class StateStore:
                 raise KeyError("Unknown proposal")
             return match
 
-    def save_analysis(self, result, pack=None, source=None):
+    def save_analysis(self, result, pack=None, source=None, *, idempotent=False):
         with self._transaction() as con:
+            if idempotent:
+                try:
+                    original = self._analysis(con, result["analysis_id"])
+                    if original["task"] != result["task"]:
+                        raise Conflict("This request already saved a different analysis.")
+                    return original
+                except KeyError:
+                    pass
             if source is not None:
                 if not pack or fingerprint(source) != pack.get("source_id"):
                     raise IntegrityFailure("Source snapshot is not bound to evidence")

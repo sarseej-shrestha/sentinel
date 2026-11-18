@@ -26,6 +26,23 @@ export type ChatCitation = {
   href?: string | null;
 };
 
+export type WorkspaceAction = {
+  kind:
+    | "inspect_map"
+    | "open_review"
+    | "open_import"
+    | "select_map"
+    | "theme"
+    | "fit_map"
+    | "reset_map"
+    | "draft_review";
+  label: string;
+  record?: MapContext | null;
+  identity?: string | null;
+  text?: string | null;
+  version?: string | null;
+};
+
 type Answer = {
   answer: string;
   model: string;
@@ -33,6 +50,9 @@ type Answer = {
   verified?: string[];
   notice?: string | null;
   citations: ChatCitation[];
+  actions?: WorkspaceAction[];
+  data_first?: boolean;
+  continuation?: string | null;
 };
 
 export function Chat({
@@ -43,6 +63,9 @@ export function Chat({
   mapRecord,
   contextLabel,
   onEvidence,
+  onAction,
+  activeMap,
+  previewId,
 }: {
   workspace: "workspace" | "map" | "history" | "published";
   analysisId?: string;
@@ -51,11 +74,17 @@ export function Chat({
   mapRecord?: MapContext;
   contextLabel: string;
   onEvidence: (citation: ChatCitation) => void;
+  onAction: (action: WorkspaceAction) => void;
+  activeMap?: string;
+  previewId?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const active = useRef<AbortController | null>(null);
+  const retryId = useRef<{ scope: string; message: string; id: string } | null>(
+    null,
+  );
   const [message, setMessage] = useState("");
   const [turns, setTurns] = useState<
     { question: string; response: Answer; scopeKey: string }[]
@@ -66,6 +95,8 @@ export function Chat({
   const [cancelled, setCancelled] = useState(false);
   const scopeKey = JSON.stringify([
     workspace,
+    activeMap,
+    previewId,
     analysisId,
     targetId,
     published,
@@ -98,6 +129,20 @@ export function Chat({
     setPending(true);
     setError("");
     setCancelled(false);
+    if (
+      retryId.current?.scope !== scopeKey ||
+      retryId.current?.message !== question
+    ) {
+      retryId.current = {
+        scope: scopeKey,
+        message: question,
+        id: crypto.randomUUID(),
+      };
+    }
+    const continuation = [...turns]
+      .reverse()
+      .find((turn) => turn.scopeKey === scopeKey && turn.response.continuation)
+      ?.response.continuation;
     try {
       const response = await api<Answer>(
         "/chat",
@@ -113,6 +158,10 @@ export function Chat({
               answer: turn.response.answer.slice(0, 1000),
             })),
           workspace,
+          request_id: retryId.current.id,
+          continuation,
+          active_map: activeMap,
+          preview_id: previewId,
           analysis_id: analysisId,
           target_id: analysisId ? targetId : undefined,
           published,
@@ -126,6 +175,7 @@ export function Chat({
           { question, response, scopeKey },
         ]);
         setMessage("");
+        retryId.current = null;
       }
     } catch (failure) {
       if (!controller.signal.aborted && latestScope.current === scopeKey) {
@@ -183,6 +233,7 @@ export function Chat({
             onClick={() => {
               cancel();
               setTurns([]);
+              retryId.current = null;
               setMessage("");
               setError("");
               setCancelled(false);
@@ -206,7 +257,9 @@ export function Chat({
               {response.scope && (
                 <p className="fine">Discussed · {response.scope.label}</p>
               )}
-              <p className="chat-answer">{response.answer}</p>
+              {!response.data_first && (
+                <p className="chat-answer">{response.answer}</p>
+              )}
               {response.notice && (
                 <p className="phase4-error">{response.notice}</p>
               )}
@@ -220,6 +273,21 @@ export function Chat({
                   ))}
                 </div>
               )}
+              {response.data_first && response.answer && (
+                <p className="chat-answer">{response.answer}</p>
+              )}
+              {response.actions?.map((action, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    dialog.current?.close();
+                    onAction(action);
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
               {response.citations.map((citation, i) =>
                 citation.href ? (
                   <a
@@ -246,6 +314,9 @@ export function Chat({
           ))}
         </div>
         <form onSubmit={send}>
+          <p className="fine">
+            A requested fixture analysis saves one snapshot in History.
+          </p>
           <label htmlFor="chat-message">Message</label>
           <textarea
             id="chat-message"
@@ -258,7 +329,7 @@ export function Chat({
           />
           <p role="status">
             {pending
-              ? "Waiting for Qwen…"
+              ? "Checking workspace data and waiting for Qwen…"
               : cancelled
                 ? "Request cancelled. Your message is still here."
                 : turns.length && !error && !message

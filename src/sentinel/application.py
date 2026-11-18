@@ -17,7 +17,7 @@ from sentinel.config import AS_OF, ROW_LIMIT
 from sentinel.console import Console
 from sentinel.investigation import capture, target_id
 from sentinel.nlq.service import ask, execute_plan
-from sentinel.state import StateStore, make_pack
+from sentinel.state import Conflict, StateStore, make_pack
 from sentinel.tasks import Task
 
 
@@ -71,11 +71,28 @@ class Application:
             raise ValueError("Fixture forecasts are prepared for 14 days.")
         return self.fixture_forecasts[values]
 
-    def analyze(self, task: Task):
+    def analyze(self, task: Task, *, request_id=None):
         task = Task.model_validate(task.model_dump())
-        return self.analyze_question(task.question(), task)
+        analysis_id = None
+        if request_id:
+            analysis_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"sentinel:{self.dataset_fingerprint}:{request_id}",
+                )
+            )
+            try:
+                original = self.store.analysis(analysis_id)
+                if original["task"] != task.model_dump():
+                    raise Conflict(
+                        "This request already saved a different analysis. Open it from History or start a new request."
+                    )
+                return original
+            except KeyError:
+                pass
+        return self.analyze_question(task.question(), task, analysis_id=analysis_id)
 
-    def analyze_question(self, question, task=None, *, query_timeout=3.0):
+    def analyze_question(self, question, task=None, *, query_timeout=3.0, analysis_id=None):
         started = time.perf_counter()
         if hashlib.sha256(self.database.read_bytes()).hexdigest() != self.dataset_fingerprint:
             raise ValueError(
@@ -164,7 +181,7 @@ class Application:
         )
         plan = record.get("resolved_query_plan") or {}
         result = {
-            "analysis_id": str(uuid.uuid4()),
+            "analysis_id": analysis_id or str(uuid.uuid4()),
             "state": state,
             "task": task.model_dump() if task else None,
             "interpretation": question,
@@ -313,6 +330,5 @@ class Application:
                 )
         result["elapsed_ms"] = (time.perf_counter() - started) * 1000
         # Persist before returning success. Measurements around the HTTP request also include this commit and serialization.
-        self.store.save_analysis(result, pack, source)
         json.dumps(result, allow_nan=False)
-        return result
+        return self.store.save_analysis(result, pack, source, idempotent=bool(analysis_id))
