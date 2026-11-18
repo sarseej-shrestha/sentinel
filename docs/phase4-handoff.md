@@ -85,4 +85,6 @@ CI=1 npm --prefix frontend run test:e2e
 node frontend/scripts/phase4-live.mjs
 ```
 
+The integration run passed **760 Python tests**, **33 Chromium tests**, the full release runner and the staged quality gate. The separate live run rendered all four published result paths, recovered from a genuine Qwen upstream 503 without retyping, and passed native 200% Chromium zoom for the map and chat with a scoped axe scan. The model can choose an unhelpful intent on ambiguous prompts. The source inspector and forecast tables keep the verified facts directly available.
+
 The standard browser suite uses disposable storage and injected responses for chat failures. The live script needs Qwen already listening on port 8769 and Chromium installed. It uses disposable ports 8770 and 8771, exercises rendered published analytics, and verifies recovery from a genuine upstream connection failure by restoring connectivity to real Qwen. It also checks native Chromium 200% zoom. The separate [recording script and live run sheet](phase4-demo.md) cover the supplied presentation and submission requirements.
