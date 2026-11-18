@@ -83,7 +83,7 @@ class RiskEngine:
             }
         return self
 
-    def assess(self, kind, row):
+    def assess(self, kind, row, *, rules_only=False):
         if kind not in FEATURES:
             raise ValueError("Unsupported risk type")
         missing = [
@@ -104,13 +104,15 @@ class RiskEngine:
         if missing:
             level, source = "unknown", "data_quality_rule_v1"
         else:
-            if kind not in self.models:
-                raise RuntimeError("Fit risk models before assessment")
-            probability = self.models[kind].predict_proba([[row[name] for name in FEATURES[kind]]])[
-                0, 1
-            ]
-            level = "high" if probability >= 0.65 else "medium" if probability >= 0.3 else "low"
-            source = "synthetic_logistic_sigmoid_v1 + deterministic_review_rules_v1"
+            level, source = "low", "deterministic_review_rules_v1"
+            if not rules_only:
+                if kind not in self.models:
+                    raise RuntimeError("Fit risk models before assessment")
+                probability = self.models[kind].predict_proba(
+                    [[row[name] for name in FEATURES[kind]]]
+                )[0, 1]
+                level = "high" if probability >= 0.65 else "medium" if probability >= 0.3 else "low"
+                source = "synthetic_logistic_sigmoid_v1 + deterministic_review_rules_v1"
             drivers = [f"{name}={row[name]}" for name in FEATURES[kind]]
             if kind == "stockout" and row["days_of_cover"] < 14:
                 level = "high"
@@ -134,5 +136,9 @@ class RiskEngine:
             "missing_information": missing,
             "recommended_review": level != "low",
             "source": source,
-            "assumptions": ["Synthetic simulation; model is not validated for real operations."],
+            "assumptions": [
+                "Synthetic evidence; descriptive review rules only."
+                if rules_only
+                else "Synthetic simulation; model is not validated for real operations."
+            ],
         }

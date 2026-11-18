@@ -67,7 +67,9 @@ test("Phase 3 Analyze answer, mock recovery and mobile navigation", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Supply Chain Map" }).click();
   await expect(page.locator(".map-node")).toHaveCount(5);
-  await page.getByRole("button", { name: "Relationships" }).click();
+  await page
+    .getByRole("button", { name: "Relationships", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Relationship list" }),
   ).toBeVisible();

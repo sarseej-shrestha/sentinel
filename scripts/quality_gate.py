@@ -36,6 +36,8 @@ def check():
         assert Path(name).suffix.lower() != ".md" or name in {
             "README.md",
             "docs/technical_spike.md",
+            "docs/phase4-handoff.md",
+            "docs/phase4-demo.md",
             "phase2/README.md",
         }, name
         blob = git("show", f":{name}")

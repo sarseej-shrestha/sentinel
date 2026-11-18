@@ -7,7 +7,9 @@ test("connected map exposes recorded evidence, moves wires and keeps exploratory
   await page.getByRole("button", { name: "Supply Chain Map" }).click();
   await expect(page.locator(".map-node")).toHaveCount(5);
   await expect(page.locator(".map-wire.recorded")).toHaveCount(5);
-  await page.getByRole("button", { name: "Relationships" }).click();
+  await page
+    .getByRole("button", { name: "Relationships", exact: true })
+    .click();
   await page
     .getByRole("button", {
       name: /shipment:SH367.*warehouse:W2.*destination warehouse/,

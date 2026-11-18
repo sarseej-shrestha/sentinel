@@ -13,8 +13,17 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from sentinel import map as supply_map
 from sentinel.application import Application
+from sentinel.chat import Chat, ChatRequest, ChatResponse
 from sentinel.config import AS_OF
+from sentinel.map_import import Confirm, ImportedMaps, Upload, preview
 from sentinel.nlq.registry import ENTITIES
+from sentinel.published import Published
+from sentinel.published_contracts import (
+    PublishedCoverage,
+    PublishedForecast,
+    PublishedLateness,
+    PublishedScore,
+)
 from sentinel.state import Conflict, IntegrityFailure
 from sentinel.tasks import StrictModel, Task
 
@@ -155,6 +164,9 @@ def create_app(database, state, static_dir=None):
     service = Application(database, state)
     app = FastAPI(title="Sentinel", version="1.0", docs_url=None, redoc_url=None)
     app.state.service = service
+    published = Published()
+    chat = Chat()
+    imported_maps = ImportedMaps(state)
     app.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"]
     )
@@ -172,7 +184,25 @@ def create_app(database, state, static_dir=None):
                 return JSONResponse(
                     {"detail": "A local workspace request is required."}, status_code=403
                 )
-            if len(await request.body()) > 16384:
+            limit = (
+                132000
+                if request.url.path in {"/api/imported-maps/preview", "/api/imported-maps/confirm"}
+                else 16384
+            )
+            content_length = request.headers.get("content-length", "")
+            if limit > 16384 and not content_length:
+                return JSONResponse(
+                    {"detail": "A bounded upload length is required."}, status_code=411
+                )
+            if content_length and (
+                not content_length.isdecimal()
+                or len(content_length) > 8
+                or int(content_length) > limit
+            ):
+                return JSONResponse(
+                    {"detail": "Request exceeds the local input limit."}, status_code=413
+                )
+            if len(await request.body()) > limit:
                 return JSONResponse(
                     {"detail": "Request exceeds the local input limit."}, status_code=413
                 )
@@ -228,6 +258,86 @@ def create_app(database, state, static_dir=None):
             "entities": ENTITIES,
             "synthetic": True,
             "application_version": "1.0",
+        }
+
+    @app.post("/api/chat", response_model=ChatResponse)
+    async def ask_qwen(body: ChatRequest, request: Request):
+        return await chat.respond(body, service, published, request)
+
+    @app.get("/api/published/catalog")
+    def published_catalog():
+        bundle = published.require()
+        return {
+            "sources": published.manifest,
+            "entities": bundle["entities"],
+            "vendors": sorted(bundle["shipment"].vendor.dropna().unique()),
+        }
+
+    @app.get("/api/published/forecast", response_model=PublishedForecast)
+    def published_forecast(
+        store: str = Query(min_length=1, max_length=30),
+        product: str = Query(min_length=1, max_length=30),
+    ):
+        return published.forecast(store, product)
+
+    @app.get("/api/published/coverage", response_model=PublishedCoverage)
+    def published_coverage(
+        store: str = Query(min_length=1, max_length=30),
+        product: str = Query(min_length=1, max_length=30),
+        increase: float = Query(default=0, ge=0, le=200),
+    ):
+        return published.coverage(store, product, increase)
+
+    @app.get("/api/published/lateness", response_model=PublishedLateness)
+    def published_lateness(vendor: str | None = Query(default=None, max_length=180)):
+        return published.lateness(vendor)
+
+    @app.get("/api/published/shipment-score", response_model=PublishedScore)
+    def published_shipment_score(record_id: int = Query(gt=0)):
+        return published.shipment_score(record_id)
+
+    @app.get("/api/imported-maps")
+    def list_maps():
+        return imported_maps.list()
+
+    @app.post("/api/imported-maps/preview")
+    def preview_map(upload: Upload):
+        result = preview(upload)
+        result.pop("records", None)
+        return result
+
+    @app.post("/api/imported-maps/confirm")
+    def save_map(upload: Confirm):
+        return imported_maps.save(upload)
+
+    @app.get("/api/imported-maps/{identity}/seed")
+    def imported_seed(identity: str):
+        return imported_maps.get(identity)["graph"]
+
+    @app.get("/api/imported-maps/{identity}/search")
+    def imported_search(identity: str, q: str = Query(min_length=1, max_length=60)):
+        return [
+            node
+            for node in imported_maps.get(identity)["graph"]["nodes"]
+            if q.casefold() in (node["id"] + " " + node["label"]).casefold()
+        ][:30]
+
+    @app.get("/api/imported-maps/{identity}/record/{kind}/{key}")
+    def imported_record(identity: str, kind: str, key: str):
+        source = imported_maps.get(identity)
+        record = source["records"].get(key if kind == "relationship" else f"{kind}:{key}")
+        if record is None:
+            raise KeyError("Imported source record unavailable.")
+        if "rows" in record:
+            record = {
+                "source_rows": ", ".join(str(row["source_row"]) for row in record["rows"]),
+                **{key: value for key, value in record["rows"][0].items() if key != "source_row"},
+            }
+        else:
+            record = {**record, "source_rows": ", ".join(map(str, record["source_rows"]))}
+        return {
+            "status": "valid",
+            "record": {**record, "file": source["filename"], "worksheet": source["worksheet"]},
         }
 
     @app.get("/api/map/seed")

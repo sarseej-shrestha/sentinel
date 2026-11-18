@@ -1,0 +1,512 @@
+{
+  "version": "phase4-v1",
+  "sklearn": "1.9.1",
+  "seed": 4200,
+  "retail": {
+    "source": "https://www.kaggle.com/datasets/anirudhchauhan/retail-store-inventory-forecasting-dataset",
+    "identifier": "anirudhchauhan/retail-store-inventory-forecasting-dataset",
+    "kaggle_version": 1,
+    "archive_local_mtime_utc": "2026-11-18T11:00:30.848759+00:00",
+    "filename": "retail_store_inventory.csv",
+    "sha256": "c7b6019887d85e6bb311a76da72560463e6bf269bfadbe4b326fbff3b1000468",
+    "license": "CC0: Public Domain",
+    "raw_rows": 73100,
+    "source_schema": [
+      "Date",
+      "Store ID",
+      "Product ID",
+      "Category",
+      "Region",
+      "Inventory Level",
+      "Units Sold",
+      "Units Ordered",
+      "Demand Forecast",
+      "Price",
+      "Discount",
+      "Weather Condition",
+      "Holiday/Promotion",
+      "Competitor Pricing",
+      "Seasonality"
+    ],
+    "mapping": {
+      "Date": "date",
+      "Store ID": "store",
+      "Product ID": "product",
+      "Inventory Level": "opening_inventory",
+      "Units Sold": "units_sold",
+      "Units Ordered": "units_ordered"
+    },
+    "source_row": "CSV record ordinal including header; first data record is 2",
+    "provenance": "Publisher-generated synthetic retail observations",
+    "reference_date": "2023-12-18",
+    "date_range": [
+      "2022-01-01",
+      "2024-01-01"
+    ],
+    "accepted": 73100,
+    "rejected": 0,
+    "reasons": {
+      "invalid": 0,
+      "duplicate_entity_date": 0
+    },
+    "excluded_series": 0,
+    "eligible_series": 100,
+    "validation": [
+      {
+        "origin": "2023-09-25",
+        "gradient_boosting": {
+          "n": 1400,
+          "missing_outcomes": 0,
+          "mae": 86.12996464981765,
+          "rmse": 112.16003732287136,
+          "interval_coverage": 0.805
+        },
+        "seasonal_naive": {
+          "n": 1400,
+          "missing_outcomes": 0,
+          "mae": 117.12142857142857,
+          "rmse": 151.30479172848428,
+          "interval_coverage": 0.8014285714285714
+        }
+      },
+      {
+        "origin": "2023-10-23",
+        "gradient_boosting": {
+          "n": 1400,
+          "missing_outcomes": 0,
+          "mae": 86.53887458490688,
+          "rmse": 112.72452758397814,
+          "interval_coverage": 0.8057142857142857
+        },
+        "seasonal_naive": {
+          "n": 1400,
+          "missing_outcomes": 0,
+          "mae": 119.14571428571429,
+          "rmse": 154.0445158294928,
+          "interval_coverage": 0.8107142857142857
+        }
+      },
+      {
+        "origin": "2023-11-20",
+        "gradient_boosting": {
+          "n": 1400,
+          "missing_outcomes": 0,
+          "mae": 88.70223965686844,
+          "rmse": 114.57966306881912,
+          "interval_coverage": 0.7992857142857143
+        },
+        "seasonal_naive": {
+          "n": 1400,
+          "missing_outcomes": 0,
+          "mae": 122.04714285714286,
+          "rmse": 155.23108580435814,
+          "interval_coverage": 0.7878571428571428
+        }
+      }
+    ],
+    "model": "quantile_hist_gradient_boosting",
+    "training_cutoff": "2023-12-18",
+    "final_dates": [
+      "2023-12-19",
+      "2024-01-01"
+    ],
+    "final": {
+      "gradient_boosting": {
+        "n": 1400,
+        "missing_outcomes": 0,
+        "mae": 83.46248398982588,
+        "rmse": 106.6222730507608,
+        "interval_coverage": 0.8185714285714286
+      },
+      "seasonal_naive": {
+        "n": 1400,
+        "missing_outcomes": 0,
+        "mae": 115.26142857142857,
+        "rmse": 146.0611711382793,
+        "interval_coverage": 0.83
+      }
+    },
+    "weakest_series": "S002/P0007",
+    "by_horizon": [
+      {
+        "day": 1,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 70.54317540343534,
+          "rmse": 91.2035219137726,
+          "interval_coverage": 0.88
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 87.0,
+          "rmse": 117.21143288945835,
+          "interval_coverage": 0.89
+        }
+      },
+      {
+        "day": 2,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 92.87274754670253,
+          "rmse": 119.70501941224633,
+          "interval_coverage": 0.77
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 120.07,
+          "rmse": 149.97656483597697,
+          "interval_coverage": 0.86
+        }
+      },
+      {
+        "day": 3,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 84.71937462983499,
+          "rmse": 104.80059408162364,
+          "interval_coverage": 0.76
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 115.71,
+          "rmse": 153.57333752966366,
+          "interval_coverage": 0.83
+        }
+      },
+      {
+        "day": 4,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 81.39725600001404,
+          "rmse": 105.04384126416824,
+          "interval_coverage": 0.82
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 110.88,
+          "rmse": 138.77362861869685,
+          "interval_coverage": 0.86
+        }
+      },
+      {
+        "day": 5,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 87.69641422853915,
+          "rmse": 112.27511759409896,
+          "interval_coverage": 0.77
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 127.48,
+          "rmse": 159.31183258000644,
+          "interval_coverage": 0.76
+        }
+      },
+      {
+        "day": 6,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 81.20502684801691,
+          "rmse": 103.37589376079526,
+          "interval_coverage": 0.83
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 121.7,
+          "rmse": 149.14663925144274,
+          "interval_coverage": 0.82
+        }
+      },
+      {
+        "day": 7,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 75.15562370813493,
+          "rmse": 94.25438513962072,
+          "interval_coverage": 0.89
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 110.6,
+          "rmse": 131.52687938212478,
+          "interval_coverage": 0.88
+        }
+      },
+      {
+        "day": 8,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 102.01421724542192,
+          "rmse": 130.71234575288744,
+          "interval_coverage": 0.77
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 130.82,
+          "rmse": 171.05092808868358,
+          "interval_coverage": 0.77
+        }
+      },
+      {
+        "day": 9,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 86.06268994601047,
+          "rmse": 108.98159453614824,
+          "interval_coverage": 0.79
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 121.41,
+          "rmse": 153.04590814523596,
+          "interval_coverage": 0.81
+        }
+      },
+      {
+        "day": 10,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 92.79201579927246,
+          "rmse": 117.66591377417096,
+          "interval_coverage": 0.86
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 128.56,
+          "rmse": 157.72507727054693,
+          "interval_coverage": 0.78
+        }
+      },
+      {
+        "day": 11,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 69.01081642132075,
+          "rmse": 88.7094491082891,
+          "interval_coverage": 0.91
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 97.44,
+          "rmse": 121.4070014455509,
+          "interval_coverage": 0.92
+        }
+      },
+      {
+        "day": 12,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 83.52698425365291,
+          "rmse": 106.1181795418678,
+          "interval_coverage": 0.83
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 114.69,
+          "rmse": 139.44593934568334,
+          "interval_coverage": 0.85
+        }
+      },
+      {
+        "day": 13,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 73.00602460827525,
+          "rmse": 89.17437242057608,
+          "interval_coverage": 0.83
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 113.83,
+          "rmse": 149.94328927964733,
+          "interval_coverage": 0.79
+        }
+      },
+      {
+        "day": 14,
+        "gradient_boosting": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 88.47240921893062,
+          "rmse": 111.46720668871363,
+          "interval_coverage": 0.75
+        },
+        "seasonal_naive": {
+          "n": 100,
+          "missing_outcomes": 0,
+          "mae": 113.47,
+          "rmse": 142.99982517471832,
+          "interval_coverage": 0.8
+        }
+      }
+    ],
+    "feature_schema": [
+      "lag_1",
+      "lag_7",
+      "lag_14",
+      "mean_7",
+      "mean_14",
+      "weekly_phase"
+    ],
+    "excluded_rows": 0
+  },
+  "shipment": {
+    "source": "https://www.kaggle.com/datasets/apoorvwatsky/supply-chain-shipment-pricing-data",
+    "identifier": "apoorvwatsky/supply-chain-shipment-pricing-data",
+    "kaggle_version": 1,
+    "archive_local_mtime_utc": "2026-11-18T11:00:31.570498+00:00",
+    "filename": "SCMS_Delivery_History_Dataset_20150929.csv",
+    "sha256": "9cffdb4ab8c6135b0f999c91b3a5c6e88a3c3dfc28c7c85feb9e97f986e3578a",
+    "license": "Data files \u00a9 Original Authors; redistribution permission unresolved",
+    "raw_rows": 10324,
+    "source_schema": [
+      "ID",
+      "Project Code",
+      "PQ #",
+      "PO / SO #",
+      "ASN/DN #",
+      "Country",
+      "Managed By",
+      "Fulfill Via",
+      "Vendor INCO Term",
+      "Shipment Mode",
+      "PQ First Sent to Client Date",
+      "PO Sent to Vendor Date",
+      "Scheduled Delivery Date",
+      "Delivered to Client Date",
+      "Delivery Recorded Date",
+      "Product Group",
+      "Sub Classification",
+      "Vendor",
+      "Item Description",
+      "Molecule/Test Type",
+      "Brand",
+      "Dosage",
+      "Dosage Form",
+      "Unit of Measure (Per Pack)",
+      "Line Item Quantity",
+      "Line Item Value",
+      "Pack Price",
+      "Unit Price",
+      "Manufacturing Site",
+      "First Line Designation",
+      "Weight (Kilograms)",
+      "Freight Cost (USD)",
+      "Line Item Insurance (USD)"
+    ],
+    "mapping": {
+      "ID": "record_id",
+      "PO / SO #": "order",
+      "Vendor": "vendor",
+      "Country": "country",
+      "Product Group": "product_group",
+      "Line Item Quantity": "quantity",
+      "Scheduled Delivery Date": "scheduled",
+      "Delivered to Client Date": "delivered",
+      "PO Sent to Vendor Date": "po_date",
+      "Delivery Recorded Date": "recorded"
+    },
+    "source_row": "CSV record ordinal including header; first data record is 2",
+    "provenance": "Kaggle uploader attributes SCMS source to USAID dataset 0162a542-4f2e-4fe2-ad5d-8f6ed2344056",
+    "date_range": [
+      "2006-05-02",
+      "2015-09-14"
+    ],
+    "reference_date": "2015-09-14",
+    "accepted": 10324,
+    "rejected": 0,
+    "reasons": {
+      "invalid_delivery_dates_or_id": 0,
+      "duplicate_source_id": 0
+    },
+    "prediction_exclusions": {
+      "missing_po_or_order": 5732,
+      "bad_features_after_po_check": 339,
+      "missing_or_inconsistent_recorded_after_feature_check": 3,
+      "linked_orders_crossing_partitions": 0,
+      "outcome_not_available_at_boundary": 385
+    },
+    "calibration_start": "2012-01-01",
+    "test_start": "2014-01-01",
+    "partitions": [
+      {
+        "n": 1996,
+        "positive_rate": 0.0716432865731463,
+        "orders": 1338
+      },
+      {
+        "n": 904,
+        "positive_rate": 0.06969026548672566,
+        "orders": 610
+      },
+      {
+        "n": 965,
+        "positive_rate": 0.0383419689119171,
+        "orders": 494
+      }
+    ],
+    "test": {
+      "calibrated": {
+        "n": 965,
+        "positive_rate": 0.0383419689119171,
+        "mean_probability": 0.10876902521095347,
+        "roc_auc": 0.6676957129543337,
+        "average_precision": 0.056068918178342565,
+        "brier": 0.060308643212267574,
+        "log_loss": 0.216786503640899
+      },
+      "uncalibrated": {
+        "n": 965,
+        "positive_rate": 0.0383419689119171,
+        "mean_probability": 0.046348697244947154,
+        "roc_auc": 0.6676957129543337,
+        "average_precision": 0.056068918178342565,
+        "brier": 0.039444365238902816,
+        "log_loss": 0.16904601499400576
+      },
+      "prevalence": {
+        "n": 965,
+        "positive_rate": 0.0383419689119171,
+        "mean_probability": 0.0716432865731463,
+        "roc_auc": 0.5,
+        "average_precision": 0.0383419689119171,
+        "brier": 0.037980840089848776,
+        "log_loss": 0.17256048867199952
+      }
+    },
+    "model": "sigmoid_calibrated_logistic_regression",
+    "feature_schema": [
+      "country",
+      "product_group",
+      "quantity"
+    ],
+    "prediction_excluded_rows": 6459
+  }
+}

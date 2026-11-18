@@ -45,7 +45,7 @@ class Console:
             record = {**record, "shadow_request_id": pending["event_id"]}
         return record
 
-    def _analyze(self, record, *, compact=False):
+    def _analyze(self, record, *, compact=False, forecast_predict=None, rules_only=False):
         from sentinel.nlq.planner import validate_plan
 
         output = validate_plan(record["compiled_plan"])
@@ -58,13 +58,19 @@ class Console:
         }.get(intent)
         if risk_kind:
             if self.risks is None:
-                self.risks = RiskEngine().fit()
-            record["risks"] = [self.risks.assess(risk_kind, row) for row in query["rows"]]
+                self.risks = RiskEngine() if rules_only else RiskEngine().fit()
+            record["risks"] = [
+                self.risks.assess(risk_kind, row, rules_only=rules_only) for row in query["rows"]
+            ]
             record["recommendations"] = [
                 recommendation(query, risk, compact=compact) for risk in record["risks"]
             ]
         elif intent == "forecast":
-            record["forecast"] = forecast_from_result(query)
+            record["forecast"] = (
+                forecast_from_result(query)
+                if forecast_predict is None
+                else forecast_from_result(query, predict=forecast_predict)
+            )
             record["recommendations"] = [
                 recommendation(query, forecast_output=record["forecast"], compact=compact)
             ]

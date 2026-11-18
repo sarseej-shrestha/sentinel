@@ -5,18 +5,52 @@ import hashlib
 import json
 import time
 import uuid
+from collections import defaultdict
 from datetime import date, timedelta
+from functools import lru_cache
 from pathlib import Path
 
 import duckdb
 
-from sentinel.analytics.forecast import current_forecast_context
-from sentinel.config import AS_OF
+from sentinel.analytics.forecast import current_forecast_context, forecast
+from sentinel.config import AS_OF, ROW_LIMIT
 from sentinel.console import Console
 from sentinel.investigation import capture, target_id
 from sentinel.nlq.service import ask, execute_plan
 from sentinel.state import StateStore, make_pack
 from sentinel.tasks import Task
+
+
+@lru_cache(maxsize=128)
+def prepare_fixture_forecast(values):
+    return forecast(values, 14)
+
+
+def fixture_forecasts(con):
+    histories = defaultdict(list)
+    for product, warehouse, day, units, quality in con.execute(
+        "SELECT product_id, warehouse_id, demand_date, units, data_quality_flag "
+        "FROM demand_view ORDER BY demand_date"
+    ).fetchall():
+        histories[product, warehouse].append(
+            {
+                "demand_date": day,
+                "units": units,
+                "data_quality_flag": quality,
+            }
+        )
+    results = {}
+    for rows in histories.values():
+        if (
+            len(rows) <= ROW_LIMIT
+            and current_forecast_context(rows, AS_OF)["freshness_status"] == "current"
+        ):
+            values = tuple(row["units"] for row in rows)
+            try:
+                results[values] = prepare_fixture_forecast(values)
+            except (TypeError, ValueError):
+                continue
+    return results
 
 
 class Application:
@@ -29,7 +63,13 @@ class Application:
         with duckdb.connect(str(self.database), read_only=True) as con:
             con.execute("SELECT excluded_demand_count, demand_source_ids FROM risk_view LIMIT 0")
             con.execute("SELECT shipment_source_ids FROM supplier_view LIMIT 0")
+            self.fixture_forecasts = fixture_forecasts(con)
         self.console = Console(self.database)
+
+    def fixture_forecast(self, values, horizon):
+        if horizon != 14:
+            raise ValueError("Fixture forecasts are prepared for 14 days.")
+        return self.fixture_forecasts[values]
 
     def analyze(self, task: Task):
         task = Task.model_validate(task.model_dump())
@@ -106,7 +146,9 @@ class Application:
         error = record["failure_behavior"]
         if record["status"] == "ok":
             try:
-                self.console._analyze(record, compact=True)
+                self.console._analyze(
+                    record, compact=True, rules_only=True, forecast_predict=self.fixture_forecast
+                )
             except (ValueError, KeyError, TypeError):
                 error = "The evidence is incomplete or invalid for this analysis. Review data quality before continuing."
                 record["status"] = "missing_information"
@@ -183,7 +225,7 @@ class Application:
                 )
             if risks:
                 result["warnings"].append(
-                    "Review levels combine transparent rules with a synthetic classifier. They are not validated operational probabilities."
+                    "Review levels apply deterministic checks to synthetic evidence. They describe review priorities, not future probabilities."
                 )
             if source and not pack["truncated"]:
                 for target in source["targets"]:

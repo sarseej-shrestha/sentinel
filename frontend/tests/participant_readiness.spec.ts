@@ -8,7 +8,9 @@ test("Supplier B recommendation opens its own source records live and after repl
   await page
     .getByRole("combobox", { name: "Analysis task" })
     .selectOption("supplier_delay");
-  await page.getByRole("combobox", { name: "Supplier", exact: true }).selectOption("");
+  await page
+    .getByRole("combobox", { name: "Supplier", exact: true })
+    .selectOption("");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
     page.getByLabel("Recommendation", { exact: true }),
@@ -50,9 +52,12 @@ test("Supplier B recommendation opens its own source records live and after repl
   await page.getByLabel("Review note").fill("Follow up Supplier B records.");
   await page.getByRole("button", { name: "Save pending draft" }).click();
   await expect(page.getByText("Pending · revision 1")).toBeVisible();
-  await page.getByRole("combobox", { name: "Analysis task" }).selectOption("stockout");
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("supplier_delay");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("stockout");
+  await page
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("supplier_delay");
   await expect(page.getByText("Pending · revision 1")).toBeVisible();
   await expectSupplierB();
   await page.getByRole("button", { name: "Approve simulation" }).click();
@@ -60,8 +65,7 @@ test("Supplier B recommendation opens its own source records live and after repl
   await expect(
     page.getByText(/Simulation approved · revision 2/),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "History", exact: true }).click();
   await expect(page.getByText(/audit events verified/)).toBeVisible();
   await page.getByRole("button", { name: "Open review" }).first().click();
   await expect(page.getByText(/Saved snapshot/)).toBeVisible();
@@ -135,7 +139,8 @@ test("slow evidence paging retains focus across source and aggregate pages", asy
   await page.keyboard.press("Escape");
 
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("forecast");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await page.getByRole("button", { name: "Inspect source evidence" }).click();
   await expect(dialog.getByText("Snapshot integrity verified")).toBeVisible();
@@ -234,7 +239,8 @@ test("all-zero forecast draws finite zero lines and keeps fourteen table rows", 
   );
   await page.goto("/");
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("forecast");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
     page.getByRole("img", { name: /Fourteen-day demand forecast/ }),
@@ -263,7 +269,8 @@ test("all-zero forecast draws finite zero lines and keeps fourteen table rows", 
   await page.unroute("**/api/**");
   await page.goto("/");
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("forecast");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   const ordinary = page.locator(".forecast-chart");
   await expect(ordinary).toBeVisible();
@@ -287,17 +294,18 @@ test("history rows and controls identify task, scope and saved follow-up", async
   await page.goto("/");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("forecast");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("supplier_delay");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("supplier_delay");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await page.getByLabel("Recommendation", { exact: true }).selectOption("r2");
   await page.getByLabel("Reviewer name").fill("History reviewer");
   await page.getByLabel("Review note").fill("Supplier B follow-up");
   await page.getByRole("button", { name: "Save pending draft" }).click();
-  await page
-    .getByRole("button", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "History", exact: true }).click();
   await expect(page.getByText(/audit events verified/)).toBeVisible();
   await expect(
     page

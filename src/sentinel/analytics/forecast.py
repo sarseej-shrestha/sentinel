@@ -128,7 +128,7 @@ def walk_forward(history, horizon=14, min_train=84, step=14):
     }
 
 
-def forecast_from_result(result, horizon=14):
+def forecast_from_result(result, horizon=14, *, predict=forecast):
     from datetime import date
 
     from sentinel.analytics.evidence import verified
@@ -142,7 +142,7 @@ def forecast_from_result(result, horizon=14):
         raise ValueError("Missing or duplicate daily observations; review data before forecasting")
     if any(r.get("data_quality_flag", "ok") != "ok" for r in rows) or result.truncated:
         raise ValueError("A complete, valid demand series is required")
-    output = forecast([r["units"] for r in rows], horizon)
+    output = dict(predict(tuple(r["units"] for r in rows), horizon))
     output.update(
         evidence_id=result.evidence_id, evidence_rows=rows, last_observed_date=dates[-1].isoformat()
     )

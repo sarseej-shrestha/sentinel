@@ -11,6 +11,8 @@ import {
   Layers,
   LineChart,
   Package,
+  PanelLeft,
+  SunMoon,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -19,7 +21,9 @@ import {
   X,
 } from "lucide-react";
 import { Sources, type Target } from "./Sources";
-import { SupplyChainMap } from "./SupplyChainMap";
+import { Chat, type MapContext, type PublishedContext } from "./Chat";
+import { PublishedData } from "./PublishedData";
+import { MapWorkspace } from "./MapImport";
 import { api, ApiError } from "./api";
 import { runStudyAnalysis, type StudyMode } from "./mockAiService";
 import { readSession, writeSession } from "./drafts";
@@ -876,12 +880,48 @@ function Review({
     </section>
   );
 }
+function preference(key: string, fallback: string) {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function savePreference(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* Session preference remains active. */
+  }
+}
+
 export default function App() {
+  const [collapsed, setCollapsed] = useState(
+    () => preference("sentinel-sidebar", "") === "closed",
+  );
+  const [theme, setTheme] = useState(() =>
+    preference(
+      "sentinel-theme",
+      window.matchMedia("(prefers-color-scheme: light)").matches
+        ? "light"
+        : "dark",
+    ) === "light"
+      ? "light"
+      : "dark",
+  );
+  const [publishedContext, setPublishedContext] = useState<PublishedContext>();
+  const [mapContext, setMapContext] = useState<MapContext>();
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
   const [catalog, setCatalog] = useState<Catalog | null>(null),
     [catalogError, setCatalogError] = useState(""),
     [kind, setKind] = useState<Kind>("supplier_delay"),
     [forms, setForms] = useState(defaults),
-    [view, setView] = useState<"workspace" | "map" | "history">("workspace"),
+    [view, setView] = useState<"workspace" | "map" | "history" | "published">(
+      "workspace",
+    ),
     [result, setResult] = useState<Analysis | null>(null),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
@@ -1101,7 +1141,7 @@ export default function App() {
     ],
   };
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <a href="#main" className="skip-link">
         Skip to workspace
       </a>
@@ -1114,10 +1154,24 @@ export default function App() {
             SENTINEL<small>Evidence before action</small>
           </span>
         </a>
-        <div className="nav-label">WORKSPACE</div>
-        <nav aria-label="Primary">
+        <button
+          type="button"
+          className="sidebar-toggle"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-controls="primary-navigation"
+          aria-expanded={!collapsed}
+          onClick={() => {
+            setCollapsed(!collapsed);
+            savePreference("sentinel-sidebar", collapsed ? "open" : "closed");
+          }}
+        >
+          <PanelLeft size={18} aria-hidden="true" />
+          <span>{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
+        </button>
+        <nav aria-label="Primary" id="primary-navigation">
           <button
             className={`nav-task ${view === "workspace" ? "active" : ""}`}
+            aria-label="Analyze"
             aria-current={view === "workspace" ? "page" : undefined}
             onClick={() => choose(kind)}
           >
@@ -1126,14 +1180,19 @@ export default function App() {
           </button>
           <button
             className={`nav-task ${view === "map" ? "active" : ""}`}
+            aria-label="Supply Chain Map"
             aria-current={view === "map" ? "page" : undefined}
-            onClick={() => setView("map")}
+            onClick={() => {
+              if (view !== "map") setMapContext(undefined);
+              setView("map");
+            }}
           >
             <Layers size={19} />
             <span>Supply Chain Map</span>
           </button>
           <button
             className={`nav-task ${view === "history" ? "active" : ""}`}
+            aria-label="History"
             aria-current={view === "history" ? "page" : undefined}
             onClick={() => {
               reset();
@@ -1143,6 +1202,18 @@ export default function App() {
           >
             <HistoryIcon size={19} />
             <span>History</span>
+          </button>
+          <button
+            className={`nav-task ${view === "published" ? "active" : ""}`}
+            aria-label="Published data"
+            aria-current={view === "published" ? "page" : undefined}
+            onClick={() => {
+              if (view !== "published") setPublishedContext(undefined);
+              setView("published");
+            }}
+          >
+            <LineChart size={19} aria-hidden="true" />
+            <span>Published data</span>
           </button>
         </nav>
         <div className="sidebar-bottom">
@@ -1166,12 +1237,29 @@ export default function App() {
             <Layers size={16} /> Operations /{" "}
             {view === "history"
               ? "History"
-              : view === "map"
-                ? "Map"
-                : "Analyze"}
+              : view === "published"
+                ? "Published data"
+                : view === "map"
+                  ? "Map"
+                  : "Analyze"}
           </span>
           <div>
-            <span className="synthetic-badge">SYNTHETIC DATA</span>
+            <button
+              type="button"
+              aria-label="Light theme"
+              aria-pressed={theme === "light"}
+              onClick={() => {
+                const next = theme === "light" ? "dark" : "light";
+                setTheme(next);
+                savePreference("sentinel-theme", next);
+              }}
+            >
+              <SunMoon size={16} aria-hidden="true" />{" "}
+              {theme === "light" ? "Light" : "Dark"}
+            </button>
+            <span className="synthetic-badge">
+              {view === "published" ? "HISTORICAL SOURCES" : "SYNTHETIC DATA"}
+            </span>
             <span className="reference">
               Reference date{" "}
               <strong>{catalog?.reference_date ?? "Loading…"}</strong>
@@ -1184,8 +1272,11 @@ export default function App() {
               {catalogError} <button onClick={loadCatalog}>Reconnect</button>
             </Alert>
           )}
-          {view === "map" ? (
-            <SupplyChainMap
+          {view === "published" ? (
+            <PublishedData onContext={setPublishedContext} />
+          ) : view === "map" ? (
+            <MapWorkspace
+              onSource={setMapContext}
               datasetFingerprint={catalog?.dataset_fingerprint ?? "loading"}
             />
           ) : view === "history" ? (
@@ -1736,12 +1827,23 @@ export default function App() {
           <footer className="footer">
             <span>Sentinel / SIGSEGV</span>
             <span>
-              Synthetic observations. Explicit assumptions. Human-reviewed
-              simulations.
+              {view === "published"
+                ? "Historical datasets · Independent sources"
+                : "Synthetic observations · Human-reviewed simulations"}
             </span>
           </footer>
         </main>
       </div>
+      <Chat
+        analysisId={
+          view === "workspace" && result?.evidence_id
+            ? result.analysis_id
+            : undefined
+        }
+        published={view === "published" ? publishedContext : undefined}
+        mapRecord={view === "map" ? mapContext : undefined}
+        onEvidence={(id) => void openSnapshot(id)}
+      />
       {evidence && (
         <EvidenceDialog
           id={evidence}

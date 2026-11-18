@@ -63,7 +63,9 @@ def _node(record):
 
 def _links(con, record):
     if record["status"] != "valid":
-        return [], [f"{record['kind']} {record['id']} is {record['status']}; relationships cannot be verified."]
+        return [], [
+            f"{record['kind']} {record['id']} is {record['status']}; relationships cannot be verified."
+        ]
     kind, row, identity = record["kind"], record["record"], record["id"]
     links = []
     if kind == "shipment":
@@ -84,7 +86,9 @@ def _links(con, record):
             ("product", row.get("product_id"), "line item product", "order_item", identity),
         ]
     elif kind == "product":
-        links = [("supplier", row.get("supplier_id"), "listed product supplier", "product", identity)]
+        links = [
+            ("supplier", row.get("supplier_id"), "listed product supplier", "product", identity)
+        ]
         links += [
             ("order_item", item["item_id"], "order line item", "order_item", item["item_id"])
             for item in _rows(con, "order_items", "product_id = ?", (identity,), 10)
@@ -92,7 +96,9 @@ def _links(con, record):
     elif kind == "supplier":
         links = [
             ("shipment", item["shipment_id"], "recorded shipment", "shipment", item["shipment_id"])
-            for item in _rows(con, "shipments", "supplier_id = ? ORDER BY promised_date", (identity,), 10)
+            for item in _rows(
+                con, "shipments", "supplier_id = ? ORDER BY promised_date", (identity,), 10
+            )
         ]
         links += [
             ("product", item["product_id"], "listed product", "product", item["product_id"])
@@ -101,7 +107,9 @@ def _links(con, record):
     elif kind == "warehouse":
         links = [
             ("shipment", item["shipment_id"], "received shipment", "shipment", item["shipment_id"])
-            for item in _rows(con, "shipments", "warehouse_id = ? ORDER BY promised_date", (identity,), 10)
+            for item in _rows(
+                con, "shipments", "warehouse_id = ? ORDER BY promised_date", (identity,), 10
+            )
         ]
     nodes, edges, warnings = [], [], []
     for other_kind, other_id, label, evidence_kind, evidence_id in links:
@@ -110,7 +118,9 @@ def _links(con, record):
             continue
         other = _record(con, other_kind, other_id)
         if other["status"] != "valid":
-            warnings.append(f"{label}: {other_kind} {other_id} is {other['status']}; no verified wire was drawn.")
+            warnings.append(
+                f"{label}: {other_kind} {other_id} is {other['status']}; no verified wire was drawn."
+            )
             continue
         nodes.append(_node(other))
         source = f"{kind}:{identity}"
@@ -119,16 +129,18 @@ def _links(con, record):
         if evidence["status"] != "valid":
             warnings.append(f"{label}: contributing record is {evidence['status']}.")
             continue
-        edges.append({
-            "id": "|".join(sorted((source, target))) + "|" + label,
-            "from": source,
-            "to": target,
-            "label": label,
-            "evidence_kind": evidence_kind,
-            "evidence_id": evidence_id,
-            "source_record_id": evidence["record"]["source_record_id"],
-            "type": "recorded",
-        })
+        edges.append(
+            {
+                "id": "|".join(sorted((source, target))) + "|" + label,
+                "from": source,
+                "to": target,
+                "label": label,
+                "evidence_kind": evidence_kind,
+                "evidence_id": evidence_id,
+                "source_record_id": evidence["record"]["source_record_id"],
+                "type": "recorded",
+            }
+        )
     return (nodes, edges), warnings
 
 
@@ -152,14 +164,22 @@ def seed(database):
             ["S2", "W2"],
         ).fetchone()
     if not match:
-        return {"nodes": [], "edges": [], "warnings": ["No verified S2/W2 seed shipment is available."]}
+        return {
+            "nodes": [],
+            "edges": [],
+            "warnings": ["No verified S2/W2 seed shipment is available."],
+        }
     first = expand(database, "shipment", match[0])
     order = next((n for n in first["nodes"] if n["kind"] == "order"), None)
     if order:
         second = expand(database, "order", order["record_id"])
         by_id = {n["id"]: n for n in [*first["nodes"], *second["nodes"]]}
         by_edge = {e["id"]: e for e in [*first["edges"], *second["edges"]]}
-        return {"nodes": list(by_id.values()), "edges": list(by_edge.values()), "warnings": first["warnings"] + second["warnings"]}
+        return {
+            "nodes": list(by_id.values()),
+            "edges": list(by_edge.values()),
+            "warnings": first["warnings"] + second["warnings"],
+        }
     return first
 
 

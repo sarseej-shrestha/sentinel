@@ -3,11 +3,11 @@ import AxeBuilder from "@axe-core/playwright";
 import { mkdir } from "node:fs/promises";
 
 const workflows = [
-  ["Late deliveries", "Supplier late deliveries"],
-  ["Inventory coverage", "Inventory coverage"],
-  ["Demand forecast", "Demand forecast"],
-  ["Supplier investigation", "Supplier investigation"],
-  ["What-if simulation", "Demand-increase simulation"],
+  ["supplier_delay", "Supplier late deliveries"],
+  ["stockout", "Inventory coverage"],
+  ["forecast", "Demand forecast"],
+  ["supplier_risk", "Supplier investigation"],
+  ["what_if", "Demand-increase simulation"],
 ];
 for (const [nav, title] of workflows) {
   test(`${nav}: real analysis, evidence, edit, approval and replay`, async ({
@@ -16,7 +16,9 @@ for (const [nav, title] of workflows) {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/");
-    await page.getByRole("button", { name: nav, exact: false }).first().click();
+    await page
+      .getByRole("combobox", { name: "Analysis task" })
+      .selectOption(nav);
     await expect(
       page.getByRole("heading", { name: title, exact: true }),
     ).toBeVisible();
@@ -24,14 +26,14 @@ for (const [nav, title] of workflows) {
       .getByRole("button", { name: "Run analysis", exact: true })
       .click();
     await expect(
-      page.getByRole("button", { name: "Inspect source evidence" }),
+      page.getByRole("button", { name: /View evidence/ }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Inspect source evidence" }).click();
+    await page.getByRole("button", { name: /View evidence/ }).click();
     const dialog = page.getByRole("dialog", {
       name: "Inspect source evidence",
     });
     await expect(dialog.getByText("Snapshot integrity verified")).toBeVisible();
-    if (nav === "Demand forecast") {
+    if (nav === "forecast") {
       await dialog.getByRole("button", { name: "Next", exact: true }).click();
       await expect(dialog.getByText("26–50 of 180")).toBeVisible();
     }
@@ -64,8 +66,7 @@ for (const [nav, title] of workflows) {
         "Simulation approved · revision 3. This decision is final.",
       ),
     ).toBeVisible();
-    await page
-      .getByRole("button", { name: "History", exact: true }).click();
+    await page.getByRole("button", { name: "History", exact: true }).click();
     await expect(page.getByText(/audit events verified/)).toBeVisible();
     await page.getByRole("button", { name: "Open review" }).first().click();
     await expect(page.getByText(/Saved snapshot/)).toBeVisible();
@@ -86,23 +87,24 @@ test("accessible keyboard flow, table alternatives and responsive layout", async
   await page.keyboard.press("Enter");
   await expect(page.locator("#main")).toBeFocused();
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("forecast");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Inspect source evidence" }),
+    page.getByRole("button", { name: /View evidence/ }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Analysis result", exact: true }),
+    page.getByRole("heading", { name: "Answer", exact: true }),
   ).toBeFocused();
   await page.getByText("View forecast data table").click();
   await expect(page.getByRole("table").first()).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.getByRole("button", { name: "Inspect source evidence" }).click();
+  await page.getByRole("button", { name: /View evidence/ }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("button", { name: "Inspect source evidence" }),
+    page.getByRole("button", { name: /View evidence/ }),
   ).toBeFocused();
   await mkdir("../artifacts/browser", { recursive: true });
   await page.screenshot({
@@ -127,7 +129,8 @@ test("empty results, injected service failure, retry and preserved inputs", asyn
 }) => {
   await page.goto("/");
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("stockout");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("stockout");
   await page.getByLabel("Coverage threshold (days)").fill("1");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
@@ -154,7 +157,7 @@ test("empty results, injected service failure, retry and preserved inputs", asyn
   await expect(page.getByLabel("Coverage threshold (days)")).toHaveValue("14");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Inspect source evidence" }),
+    page.getByRole("button", { name: /View evidence/ }),
   ).toBeVisible();
 });
 
@@ -178,14 +181,13 @@ test("late responses cannot replace a newer task; loading is announced", async (
     ),
   ).toBeVisible();
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("what_if");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("what_if");
   await page.waitForTimeout(1500);
   await expect(
     page.getByRole("heading", { name: "Demand-increase simulation" }),
   ).toBeVisible();
-  await expect(
-    page.getByText("A clear path from question to decision"),
-  ).toBeVisible();
+  await expect(page.getByText(/Choose a task, set its inputs/)).toBeVisible();
 });
 
 for (const [nav] of workflows) {
@@ -193,10 +195,10 @@ for (const [nav] of workflows) {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: nav, exact: false }).first().click();
-    await expect(
-      page.getByText("A clear path from question to decision"),
-    ).toBeVisible();
+    await page
+      .getByRole("combobox", { name: "Analysis task" })
+      .selectOption(nav);
+    await expect(page.getByText(/Choose a task, set its inputs/)).toBeVisible();
     // Inject response states to exercise recovery UI; these are not model outcomes.
     await page.route(
       "**/api/analyses",
@@ -303,24 +305,24 @@ test("unsaved review survives task, history and reload navigation", async ({
     .getByLabel("Review note")
     .fill("Keep the unsaved investigation rationale");
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("forecast");
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("supplier_delay");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("supplier_delay");
   await expect(page.getByLabel("Review note")).toHaveValue(
     "Keep the unsaved investigation rationale",
   );
   await page.getByRole("button", { name: "Save pending draft" }).click();
   await expect(page.getByText("Pending · revision 1")).toBeVisible();
   await page.getByLabel("Review note").fill("Unsaved revision two");
-  await page
-    .getByRole("button", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "History", exact: true }).click();
   await page.getByRole("button", { name: "Open review" }).first().click();
   await expect(page.getByLabel("Review note")).toHaveValue(
     "Unsaved revision two",
   );
   await page.reload();
-  await page
-    .getByRole("button", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "History", exact: true }).click();
   await page.getByRole("button", { name: "Open review" }).first().click();
   await expect(page.getByLabel("Review note")).toHaveValue(
     "Unsaved revision two",
@@ -367,7 +369,8 @@ test("coverage and demand sensitivity expose observation dates and assumptions",
 }) => {
   await page.goto("/");
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("stockout");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("stockout");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   const coverage = page.getByRole("region", {
     name: "Inventory coverage results",
@@ -380,7 +383,8 @@ test("coverage and demand sensitivity expose observation dates and assumptions",
   ).toBeVisible();
   await expect(page.getByText(/28 observed daily demand values/)).toBeVisible();
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("what_if");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("what_if");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   const scenario = page.getByRole("region", {
     name: "Demand-increase simulation results",
@@ -401,7 +405,7 @@ test("supplier transaction investigation reconciles the saved target", async ({
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
-  await page.getByRole("button", { name: "Inspect source evidence" }).click();
+  await page.getByRole("button", { name: /View evidence/ }).click();
   await expect(
     page.getByText(
       "19 late / 31 evaluable · 0 excluded · 0 unassignable dates",
@@ -422,24 +426,24 @@ test("supplier transaction investigation reconciles the saved target", async ({
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("button", { name: "Inspect source evidence" }),
+    page.getByRole("button", { name: /View evidence/ }),
   ).toBeFocused();
 });
 
 for (const [fixture, nav, expected] of [
   [
     "missing-demand",
-    "Inventory coverage",
+    "stockout",
     "17 assessed · 17 matching · 0 assessed outside threshold · 1 unevaluable",
   ],
   [
     "unevaluable-supplier",
-    "Late deliveries",
+    "supplier_delay",
     "2 assessed · 2 matching · 0 assessed outside threshold · 1 unevaluable",
   ],
   [
     "unevaluable-all",
-    "Late deliveries",
+    "supplier_delay",
     "0 assessed · 0 matching · 0 assessed outside threshold · 3 unevaluable",
   ],
 ]) {
@@ -452,12 +456,15 @@ for (const [fixture, nav, expected] of [
       }),
     );
     await page.goto("/");
-    await page.getByRole("button", { name: nav, exact: false }).first().click();
+    await page
+      .getByRole("combobox", { name: "Analysis task" })
+      .selectOption(nav);
     await page
       .getByRole("button", { name: "Run analysis", exact: true })
       .click();
+    await page.getByText(/Quality and exclusions ·/).click();
     await expect(
-      page.getByRole("region", { name: "Population quality" }),
+      page.getByRole("group", { name: "Population quality" }),
     ).toContainText(expected);
     if (fixture === "unevaluable-all") {
       await expect(
@@ -467,7 +474,7 @@ for (const [fixture, nav, expected] of [
         page.getByRole("button", { name: "Save pending draft" }),
       ).toHaveCount(0);
     }
-    await page.getByRole("button", { name: "Inspect source evidence" }).click();
+    await page.getByRole("button", { name: /View evidence/ }).click();
     await expect(page.getByText("Snapshot integrity verified")).toBeVisible();
   });
 }
@@ -482,18 +489,26 @@ test("stale forecast explains the gap and keeps editable inputs", async ({
   );
   await page.goto("/");
   await page
-    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
+    .getByRole("combobox", { name: "Analysis task" })
+    .selectOption("forecast");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Review the available information" }),
   ).toBeVisible();
   await expect(page.getByText(/stale history/i).first()).toBeVisible();
+  await page.getByText("Forecast origin and freshness").click();
   await expect(page.getByText(/last observed: 2026-09-23/i)).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Product", exact: true })).toHaveValue("P1");
-  await expect(page.getByRole("combobox", { name: "Warehouse", exact: true })).toHaveValue("W3");
-  await page.getByRole("combobox", { name: "Product", exact: true }).selectOption("P2");
+  await expect(
+    page.getByRole("combobox", { name: "Product", exact: true }),
+  ).toHaveValue("P1");
+  await expect(
+    page.getByRole("combobox", { name: "Warehouse", exact: true }),
+  ).toHaveValue("W3");
+  await page
+    .getByRole("combobox", { name: "Product", exact: true })
+    .selectOption("P2");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
-  await expect(page.getByText("success", { exact: true })).toBeVisible();
+  await expect(page.getByText("View forecast data table")).toBeVisible();
 });
 
 test("stale revision keeps local note until the reviewer refreshes explicitly", async ({

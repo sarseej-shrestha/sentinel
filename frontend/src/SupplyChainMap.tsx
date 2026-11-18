@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import type { MapContext } from "./Chat";
 
 type MapNode = {
   id: string;
@@ -34,11 +35,18 @@ const HEIGHT = 94;
 
 export function SupplyChainMap({
   datasetFingerprint,
+  onSource,
+  endpoint,
+  importedName,
 }: {
   datasetFingerprint: string;
+  onSource: (record?: MapContext) => void;
+  endpoint: string;
+  importedName?: string;
 }) {
   const storageKey = "sentinel-map-v1:" + datasetFingerprint;
   const stage = useRef<HTMLDivElement>(null);
+  const inspected = useRef(0);
   const drag = useRef<{
     id?: string;
     x: number;
@@ -65,34 +73,42 @@ export function SupplyChainMap({
   const [listOpen, setListOpen] = useState(false);
   const [ready, setReady] = useState(false);
 
-  function merge(graph: Graph) {
-    setNodes((current) => {
-      const byId = new Map(current.map((node) => [node.id, node]));
-      for (const node of graph.nodes) byId.set(node.id, node);
-      return [...byId.values()];
-    });
-    setEdges((current) => {
-      const byId = new Map(current.map((edge) => [edge.id, edge]));
-      for (const edge of graph.edges) byId.set(edge.id, edge);
-      return [...byId.values()];
-    });
-    setPositions((current) => {
-      const next = { ...current };
-      for (const node of graph.nodes) {
-        if (!next[node.id])
-          next[node.id] = initial[node.id] ?? {
-            x: 180 + Object.keys(next).length * 72,
-            y: 130 + (Object.keys(next).length % 4) * 135,
-          };
-      }
-      return next;
-    });
-    if (graph.warnings.length) setWarning(graph.warnings.join(" "));
-  }
+  const merge = useCallback(
+    (graph: Graph) => {
+      setNodes((current) => {
+        const byId = new Map(current.map((node) => [node.id, node]));
+        for (const node of graph.nodes) byId.set(node.id, node);
+        return [...byId.values()];
+      });
+      setEdges((current) => {
+        const byId = new Map(current.map((edge) => [edge.id, edge]));
+        for (const edge of graph.edges) byId.set(edge.id, edge);
+        return [...byId.values()];
+      });
+      setPositions((current) => {
+        const next = { ...current };
+        for (const node of graph.nodes) {
+          if (!next[node.id])
+            next[node.id] = importedName
+              ? {
+                  x: 32 + (Object.keys(next).length % 4) * 270,
+                  y: 36 + Math.floor(Object.keys(next).length / 4) * 142,
+                }
+              : (initial[node.id] ?? {
+                  x: 180 + Object.keys(next).length * 72,
+                  y: 130 + (Object.keys(next).length % 4) * 135,
+                });
+        }
+        return next;
+      });
+      if (graph.warnings.length) setWarning(graph.warnings.join(" "));
+    },
+    [importedName],
+  );
   useEffect(() => {
     let active = true;
     setLoading(true);
-    api<Graph>("/map/seed")
+    api<Graph>(endpoint + "/seed")
       .then((graph) => {
         if (!active) return;
         merge(graph);
@@ -113,7 +129,7 @@ export function SupplyChainMap({
       active = false;
     };
     // The seed is bound to the current dataset version.
-  }, [storageKey]);
+  }, [endpoint, merge, storageKey]);
   useEffect(() => {
     if (!ready) return;
     sessionStorage.setItem(
@@ -147,6 +163,21 @@ export function SupplyChainMap({
     const bend = Math.max(70, Math.abs(x2 - x1) / 2);
     return `M ${x1} ${y1} C ${x1 + (backward ? -bend : bend)} ${y1}, ${x2 + (backward ? bend : -bend)} ${y2}, ${x2} ${y2}`;
   }
+  function zoomBy(delta: number) {
+    if (!stage.current) return;
+    const next = Math.max(importedName ? 0.1 : 0.45, Math.min(2, zoom + delta));
+    const center = {
+      x: stage.current.clientWidth / 2,
+      y: stage.current.clientHeight / 2,
+    };
+    const ratio = next / zoom;
+    setPan({
+      x: center.x - (center.x - pan.x) * ratio,
+      y: center.y - (center.y - pan.y) * ratio,
+    });
+    setZoom(next);
+  }
+
   function fit() {
     if (!nodes.length || !stage.current) return;
     const points = nodes.map((item) => coordinates(item.id));
@@ -157,7 +188,7 @@ export function SupplyChainMap({
     const scale = Math.min(
       1.25,
       Math.max(
-        0.45,
+        importedName ? 0.1 : 0.45,
         Math.min(
           (stage.current.clientWidth - 60) / (maxX - minX),
           (stage.current.clientHeight - 60) / (maxY - minY),
@@ -176,7 +207,7 @@ export function SupplyChainMap({
     setWarning("");
     try {
       const graph = await api<Graph>(
-        `/map/expand/${item.kind}/${encodeURIComponent(item.record_id)}`,
+        `${endpoint}/expand/${item.kind}/${encodeURIComponent(item.record_id)}`,
       );
       merge(graph);
     } catch (error) {
@@ -191,7 +222,9 @@ export function SupplyChainMap({
     setWarning("");
     try {
       setMatches(
-        await api<MapNode[]>(`/map/search?q=${encodeURIComponent(query)}`),
+        await api<MapNode[]>(
+          `${endpoint}/search?q=${encodeURIComponent(query)}`,
+        ),
       );
     } catch (error) {
       setWarning((error as Error).message);
@@ -207,12 +240,12 @@ export function SupplyChainMap({
         ((item.from === from && item.to === to) ||
           (item.from === to && item.to === from)),
     );
-    if (!recorded) {
+    if (!recorded && !importedName) {
       const source = nodes.find((item) => item.id === from);
       if (source) {
         try {
           const graph = await api<Graph>(
-            `/map/expand/${source.kind}/${encodeURIComponent(source.record_id)}`,
+            `${endpoint}/expand/${source.kind}/${encodeURIComponent(source.record_id)}`,
           );
           merge(graph);
           recorded = graph.edges.find(
@@ -241,12 +274,17 @@ export function SupplyChainMap({
     setSelected({ type: "edge", id: newEdge.id });
   }
   async function inspect(kind: string, id: string) {
+    const request = ++inspected.current;
     setDetail(null);
+    onSource();
     try {
       const result = await api<{
         status: string;
         record: Record<string, unknown> | null;
-      }>(`/map/record/${kind}/${encodeURIComponent(id)}`);
+      }>(`${endpoint}/record/${kind}/${encodeURIComponent(id)}`);
+      if (request !== inspected.current) return;
+      if (result.status === "valid" && !importedName)
+        onSource({ kind, record_id: id });
       setDetail(
         result.record ?? {
           status: result.status,
@@ -286,14 +324,16 @@ export function SupplyChainMap({
     <section className="map-page" aria-label="Supply Chain Map">
       <div className="map-heading">
         <div>
-          <h1>Supply Chain Map</h1>
+          <h1>{importedName || "Supply Chain Map"}</h1>
           <p>
             Recorded links are solid. Your exploratory links are dashed and
             never change source data.
           </p>
         </div>
         <span className="map-version">
-          Synthetic snapshot · {datasetFingerprint.slice(0, 8)}
+          {importedName
+            ? "Uploaded relationships"
+            : `Synthetic snapshot · ${datasetFingerprint.slice(0, 8)}`}
         </span>
       </div>
       <div className="map-toolbar">
@@ -303,22 +343,26 @@ export function SupplyChainMap({
             id="map-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Supplier B, SH367, O367…"
+            placeholder={
+              importedName ? "Find by name or ID" : "Supplier B, SH367, O367…"
+            }
           />
           <button type="submit">Find</button>
         </form>
-        <button
-          onClick={() => setZoom((value) => Math.max(0.45, value - 0.15))}
-          aria-label="Zoom out"
-        >
+        <button onClick={() => zoomBy(-0.15)} aria-label="Zoom out">
           −
         </button>
         <span aria-live="polite">{Math.round(zoom * 100)}%</span>
-        <button
-          onClick={() => setZoom((value) => Math.min(2, value + 0.15))}
-          aria-label="Zoom in"
-        >
+        <button onClick={() => zoomBy(0.15)} aria-label="Zoom in">
           +
+        </button>
+        <button
+          onClick={() => {
+            setZoom(1);
+            setPan({ x: 0, y: 0 });
+          }}
+        >
+          Reset map zoom
         </button>
         <button onClick={fit}>Fit view</button>
         <button
@@ -499,9 +543,11 @@ export function SupplyChainMap({
                   {node.source_record_id ?? "source unavailable"}
                 </p>
                 <div className="map-inspector-actions">
-                  <button onClick={() => void expand(node)}>
-                    Expand one step
-                  </button>
+                  {!importedName && (
+                    <button onClick={() => void expand(node)}>
+                      Expand one step
+                    </button>
+                  )}
                   <button
                     onClick={() => void inspect(node.kind, node.record_id)}
                   >
@@ -608,8 +654,9 @@ export function SupplyChainMap({
         )}
       </div>
       <p className="map-footnote">
-        Map records come from the current synthetic dataset. Saved review
-        evidence remains bound to its historical snapshot in History.
+        {importedName
+          ? "Imported relationships are stored separately from analysis and review evidence."
+          : "Map records come from the current synthetic dataset. Saved review evidence remains bound to its historical snapshot in History."}{" "}
         Exploratory wires and positions are stored only in this browser session.
       </p>
     </section>
