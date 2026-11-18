@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
-  Database,
   FileSearch,
   History as HistoryIcon,
   Layers,
@@ -20,7 +19,9 @@ import {
   X,
 } from "lucide-react";
 import { Sources, type Target } from "./Sources";
+import { SupplyChainMap } from "./SupplyChainMap";
 import { api, ApiError } from "./api";
+import { runStudyAnalysis, type StudyMode } from "./mockAiService";
 import { readSession, writeSession } from "./drafts";
 import type {
   Action,
@@ -131,6 +132,42 @@ function display(value: unknown, key = ""): string {
         : value.toFixed(2);
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+function resultLead(
+  result: Analysis,
+  kind: Kind,
+): { title: string; detail: string } {
+  const first = result.rows[0] ?? {};
+  if (kind === "supplier_delay") {
+    const supplier =
+      first.supplier_name ?? result.task?.supplier_id ?? "All suppliers";
+    return {
+      title:
+        result.rows.length === 1
+          ? `${display(first.late_shipments)} late / ${display(first.evaluable_shipments)} evaluable`
+          : `${result.rows.length} supplier results`,
+      detail: `${supplier} · ${result.task?.start_date} through ${result.task?.end_date} · completed deliveries by promised date`,
+    };
+  }
+  if (kind === "stockout")
+    return {
+      title: `${result.rows.length} positions below ${result.task?.horizon_days} days`,
+      detail: `Stock coverage estimate · inventory and recent observed demand through ${result.reference_date}`,
+    };
+  if (kind === "forecast")
+    return {
+      title: `14-day demand forecast`,
+      detail: `${result.task?.product_id} at ${result.task?.warehouse_id} · ${result.forecast_context?.prediction_start} through ${result.forecast_context?.prediction_end} · units per day`,
+    };
+  if (kind === "what_if")
+    return {
+      title: `Demand +${result.task?.increase_percent}% at ${result.task?.warehouse_id}`,
+      detail: `Estimated coverage with stock fixed · ${result.rows.length} products`,
+    };
+  return {
+    title: `${first.supplier_name ?? result.task?.supplier_id ?? "Supplier"} · ${first.review_level ?? "review"}`,
+    detail: `Observed supplier performance and review rules · reference ${result.reference_date}`,
+  };
 }
 function Table({
   rows,
@@ -844,7 +881,7 @@ export default function App() {
     [catalogError, setCatalogError] = useState(""),
     [kind, setKind] = useState<Kind>("supplier_delay"),
     [forms, setForms] = useState(defaults),
-    [view, setView] = useState<"workspace" | "history">("workspace"),
+    [view, setView] = useState<"workspace" | "map" | "history">("workspace"),
     [result, setResult] = useState<Analysis | null>(null),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
@@ -855,6 +892,7 @@ export default function App() {
     [existing, setExisting] = useState<Action | undefined>(),
     [reviewSelection, setReviewSelection] = useState(""),
     [replay, setReplay] = useState(false);
+  const [studyMode, setStudyMode] = useState<StudyMode>("normal");
   const sequence = useRef(0),
     controller = useRef<AbortController | null>(null),
     resultHeading = useRef<HTMLHeadingElement>(null);
@@ -924,22 +962,27 @@ export default function App() {
     setReviewSelection("");
     setReplay(false);
     try {
-      const next = await api<Analysis>(
-        "/analyses",
+      const next = await runStudyAnalysis(
         form,
+        studyMode,
+        catalog?.reference_date ?? "2026-09-30",
+        catalog?.dataset_fingerprint ?? "unavailable",
         controller.current.signal,
       );
       if (id === sequence.current) {
         setResult(next);
-        writeSession("workspace-results", {
-          ...readSession<Record<string, Analysis>>("workspace-results", {}),
-          [kind]: next,
-        });
+        if (studyMode === "normal" || studyMode === "slow")
+          writeSession("workspace-results", {
+            ...readSession<Record<string, Analysis>>("workspace-results", {}),
+            [kind]: next,
+          });
+        setStudyMode("normal");
         setTimeout(() => resultHeading.current?.focus(), 0);
       }
     } catch (e) {
       if (id === sequence.current && (e as Error).name !== "AbortError")
         setError((e as Error).message);
+      if (id === sequence.current) setStudyMode("normal");
     } finally {
       if (id === sequence.current) setLoading(false);
     }
@@ -1071,35 +1114,37 @@ export default function App() {
             SENTINEL<small>Evidence before action</small>
           </span>
         </a>
-        <div className="nav-label">ANALYSIS WORKSPACE</div>
-        <nav aria-label="Analysis tasks">
-          {tasks.map((t, i) => (
-            <button
-              key={t.kind}
-              className={`nav-task ${kind === t.kind && view === "workspace" ? "active" : ""}`}
-              aria-current={
-                kind === t.kind && view === "workspace" ? "page" : undefined
-              }
-              onClick={() => choose(t.kind)}
-            >
-              <t.icon size={19} />
-              <span>{t.short}</span>
-              <small>0{i + 1}</small>
-            </button>
-          ))}
+        <div className="nav-label">WORKSPACE</div>
+        <nav aria-label="Primary">
+          <button
+            className={`nav-task ${view === "workspace" ? "active" : ""}`}
+            aria-current={view === "workspace" ? "page" : undefined}
+            onClick={() => choose(kind)}
+          >
+            <SlidersHorizontal size={19} />
+            <span>Analyze</span>
+          </button>
+          <button
+            className={`nav-task ${view === "map" ? "active" : ""}`}
+            aria-current={view === "map" ? "page" : undefined}
+            onClick={() => setView("map")}
+          >
+            <Layers size={19} />
+            <span>Supply Chain Map</span>
+          </button>
+          <button
+            className={`nav-task ${view === "history" ? "active" : ""}`}
+            aria-current={view === "history" ? "page" : undefined}
+            onClick={() => {
+              reset();
+              setView("history");
+              loadHistory();
+            }}
+          >
+            <HistoryIcon size={19} />
+            <span>History</span>
+          </button>
         </nav>
-        <div className="sidebar-divider" />
-        <button
-          className={`nav-task ${view === "history" ? "active" : ""}`}
-          onClick={() => {
-            reset();
-            setView("history");
-            loadHistory();
-          }}
-        >
-          <HistoryIcon size={19} />
-          <span>Decision history</span>
-        </button>
         <div className="sidebar-bottom">
           <div className="local-badge">
             <span className={catalog ? "online-dot" : "offline-dot"} />
@@ -1119,7 +1164,11 @@ export default function App() {
         <header className="topbar">
           <span>
             <Layers size={16} /> Operations /{" "}
-            {view === "history" ? "History" : "Analysis"}
+            {view === "history"
+              ? "History"
+              : view === "map"
+                ? "Map"
+                : "Analyze"}
           </span>
           <div>
             <span className="synthetic-badge">SYNTHETIC DATA</span>
@@ -1135,7 +1184,11 @@ export default function App() {
               {catalogError} <button onClick={loadCatalog}>Reconnect</button>
             </Alert>
           )}
-          {view === "history" ? (
+          {view === "map" ? (
+            <SupplyChainMap
+              datasetFingerprint={catalog?.dataset_fingerprint ?? "loading"}
+            />
+          ) : view === "history" ? (
             <>
               <div className="page-heading">
                 <div>
@@ -1297,10 +1350,21 @@ export default function App() {
                     <SlidersHorizontal size={18} />
                     <h2>Define the analysis</h2>
                   </div>
-                  <p className="muted">
-                    Use supported fields to keep every constraint explicit.
-                  </p>
                   <form onSubmit={run}>
+                    <label htmlFor="analysis-task">
+                      Analysis task
+                      <select
+                        id="analysis-task"
+                        value={kind}
+                        onChange={(event) => choose(event.target.value as Kind)}
+                      >
+                        {tasks.map((item) => (
+                          <option key={item.kind} value={item.kind}>
+                            {item.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <fieldset disabled={!catalog || loading}>
                       <legend className="sr-only">{task.title} inputs</legend>
                       {kind === "supplier_delay" && (
@@ -1406,11 +1470,11 @@ export default function App() {
                           </p>
                         </>
                       )}
-                      <div className="interpretation">
+                      <details className="interpretation">
+                        <summary>Request interpretation</summary>
                         <span>INTERPRETATION PREVIEW</span>
                         <p>{interpretation(form)}</p>
-                        <small>Change any field above before running.</small>
-                      </div>
+                      </details>
                       <button className="primary run-button" type="submit">
                         {loading ? (
                           "Analyzing verified data…"
@@ -1420,33 +1484,45 @@ export default function App() {
                           </>
                         )}
                       </button>
+                      <details className="study-controls">
+                        <summary>Study response controls</summary>
+                        <label>
+                          Next response (one use)
+                          <select
+                            value={studyMode}
+                            onChange={(event) =>
+                              setStudyMode(event.target.value as StudyMode)
+                            }
+                          >
+                            <option value="normal">
+                              Verified synthetic result
+                            </option>
+                            <option value="slow">Slow verified result</option>
+                            <option value="uncertain">
+                              Simulated uncertainty
+                            </option>
+                            <option value="error">
+                              Recoverable simulated error
+                            </option>
+                          </select>
+                        </label>
+                        <p className="fine">
+                          Simulation states are labeled and cannot create a
+                          review or change stored evidence. The next run returns
+                          to the verified result.
+                        </p>
+                      </details>
                     </fieldset>
                   </form>
-                  <div className="trust-note">
-                    <ShieldCheck size={17} />
-                    <p>
-                      Validated fields. Read-only analysis.
-                      <br />
-                      Human review before every simulated decision.
-                    </p>
-                  </div>
                 </section>
                 <section
                   className={`panel result-panel state-${status}`}
                   aria-busy={loading}
                 >
-                  <div className="section-title">
-                    <Activity size={18} />
+                  <div className="section-title result-title">
                     <h2 ref={resultHeading} tabIndex={-1}>
-                      Analysis result
+                      {result ? "Answer" : "Result"}
                     </h2>
-                    <span className="tag">
-                      {replay
-                        ? "Verified snapshot"
-                        : status === "initial"
-                          ? "Ready"
-                          : status}
-                    </span>
                   </div>
                   <div
                     role="status"
@@ -1480,29 +1556,10 @@ export default function App() {
                     </>
                   ) : !result ? (
                     <div className="empty-panel">
-                      <div className="empty-icon">
-                        <task.icon size={32} />
-                      </div>
-                      <h3>A clear path from question to decision</h3>
                       <p>
-                        Set the analysis fields, inspect the interpretation,
-                        then run against the synthetic dataset.
+                        Choose a task, set its inputs, and run the analysis. The
+                        answer and its evidence will appear here.
                       </p>
-                      <ol className="process-list">
-                        <li>
-                          <span>1</span>Analyze read-only data
-                        </li>
-                        <li>
-                          <span>2</span>Inspect evidence and limitations
-                        </li>
-                        <li>
-                          <span>3</span>Review a simulated decision
-                        </li>
-                      </ol>
-                      <div className="empty-footer">
-                        <Database size={16} /> Your results will appear here. No
-                        analysis has run yet.
-                      </div>
                     </div>
                   ) : (
                     <>
@@ -1530,27 +1587,10 @@ export default function App() {
                       )}
                       {result.state === "success" && (
                         <>
-                          <div className="result-meta">
-                            <div>
-                              <small>Evidence rows</small>
-                              <strong>{result.row_count}</strong>
-                            </div>
-                            <div>
-                              <small>Reference date</small>
-                              <strong className="date-stat">
-                                {result.reference_date}
-                              </strong>
-                            </div>
-                            <div>
-                              <small>Decision mode</small>
-                              <strong className="date-stat">
-                                Human review
-                              </strong>
-                            </div>
+                          <div className="result-lead">
+                            <strong>{resultLead(result, kind).title}</strong>
+                            <p>{resultLead(result, kind).detail}</p>
                           </div>
-                          <p className="actual-interpretation">
-                            {result.interpretation}
-                          </p>
                           {result.forecast ? (
                             <>
                               <ForecastChart forecast={result.forecast} />
@@ -1595,11 +1635,14 @@ export default function App() {
                         </>
                       )}
                       {result.quality && (
-                        <section
+                        <details
                           aria-label="Population quality"
                           className="limitations"
                         >
-                          <h3>Population quality</h3>
+                          <summary>
+                            Quality and exclusions ·{" "}
+                            {result.quality.entities.unevaluable} unevaluable
+                          </summary>
                           <p>
                             {result.quality.entities.assessed} assessed ·{" "}
                             {result.quality.entities.matching} matching ·{" "}
@@ -1628,11 +1671,11 @@ export default function App() {
                                 {t.missing_observations} missing observations
                               </p>
                             ))}
-                        </section>
+                        </details>
                       )}
                       {result.forecast_context && (
-                        <section aria-label="Forecast dates">
-                          <h3>Forecast origin and freshness</h3>
+                        <details aria-label="Forecast dates">
+                          <summary>Forecast origin and freshness</summary>
                           <p>
                             Reference: {result.forecast_context.reference_date}{" "}
                             · last observed:{" "}
@@ -1655,25 +1698,26 @@ export default function App() {
                               " ",
                             )}
                           </p>
-                        </section>
+                        </details>
                       )}
                       {result.evidence_id && (
                         <button
                           className="evidence-button"
+                          aria-label="View evidence — Inspect source evidence"
                           onClick={() => setEvidence(result.evidence_id)}
                         >
-                          <FileSearch size={18} /> Inspect source evidence{" "}
+                          <FileSearch size={18} /> View evidence{" "}
                           <ArrowRight size={16} />
                         </button>
                       )}
-                      <div className="limitations">
-                        <h3>Context & limitations</h3>
+                      <details className="limitations">
+                        <summary>Context, assumptions and limitations</summary>
                         <ul>
                           {result.warnings.map((w) => (
                             <li key={w}>{w}</li>
                           ))}
                         </ul>
-                      </div>
+                      </details>
                       {result.recommendations.length > 0 && (
                         <Review
                           key={result.analysis_id + (existing?.id ?? "")}

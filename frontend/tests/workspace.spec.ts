@@ -65,8 +65,7 @@ for (const [nav, title] of workflows) {
       ),
     ).toBeVisible();
     await page
-      .getByRole("button", { name: "Decision history", exact: true })
-      .click();
+      .getByRole("button", { name: "History", exact: true }).click();
     await expect(page.getByText(/audit events verified/)).toBeVisible();
     await page.getByRole("button", { name: "Open review" }).first().click();
     await expect(page.getByText(/Saved snapshot/)).toBeVisible();
@@ -87,8 +86,7 @@ test("accessible keyboard flow, table alternatives and responsive layout", async
   await page.keyboard.press("Enter");
   await expect(page.locator("#main")).toBeFocused();
   await page
-    .getByRole("button", { name: "Demand forecast", exact: false })
-    .click();
+    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Inspect source evidence" }),
@@ -129,8 +127,7 @@ test("empty results, injected service failure, retry and preserved inputs", asyn
 }) => {
   await page.goto("/");
   await page
-    .getByRole("button", { name: "Inventory coverage", exact: false })
-    .click();
+    .getByRole("combobox", { name: "Analysis task" }).selectOption("stockout");
   await page.getByLabel("Coverage threshold (days)").fill("1");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
@@ -181,8 +178,7 @@ test("late responses cannot replace a newer task; loading is announced", async (
     ),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "What-if simulation", exact: false })
-    .click();
+    .getByRole("combobox", { name: "Analysis task" }).selectOption("what_if");
   await page.waitForTimeout(1500);
   await expect(
     page.getByRole("heading", { name: "Demand-increase simulation" }),
@@ -307,11 +303,9 @@ test("unsaved review survives task, history and reload navigation", async ({
     .getByLabel("Review note")
     .fill("Keep the unsaved investigation rationale");
   await page
-    .getByRole("button", { name: "Demand forecast", exact: false })
-    .click();
+    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
   await page
-    .getByRole("button", { name: "Late deliveries", exact: false })
-    .click();
+    .getByRole("combobox", { name: "Analysis task" }).selectOption("supplier_delay");
   await expect(page.getByLabel("Review note")).toHaveValue(
     "Keep the unsaved investigation rationale",
   );
@@ -319,16 +313,14 @@ test("unsaved review survives task, history and reload navigation", async ({
   await expect(page.getByText("Pending · revision 1")).toBeVisible();
   await page.getByLabel("Review note").fill("Unsaved revision two");
   await page
-    .getByRole("button", { name: "Decision history", exact: true })
-    .click();
+    .getByRole("button", { name: "History", exact: true }).click();
   await page.getByRole("button", { name: "Open review" }).first().click();
   await expect(page.getByLabel("Review note")).toHaveValue(
     "Unsaved revision two",
   );
   await page.reload();
   await page
-    .getByRole("button", { name: "Decision history", exact: true })
-    .click();
+    .getByRole("button", { name: "History", exact: true }).click();
   await page.getByRole("button", { name: "Open review" }).first().click();
   await expect(page.getByLabel("Review note")).toHaveValue(
     "Unsaved revision two",
@@ -375,8 +367,7 @@ test("coverage and demand sensitivity expose observation dates and assumptions",
 }) => {
   await page.goto("/");
   await page
-    .getByRole("button", { name: "Inventory coverage", exact: false })
-    .click();
+    .getByRole("combobox", { name: "Analysis task" }).selectOption("stockout");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   const coverage = page.getByRole("region", {
     name: "Inventory coverage results",
@@ -389,8 +380,7 @@ test("coverage and demand sensitivity expose observation dates and assumptions",
   ).toBeVisible();
   await expect(page.getByText(/28 observed daily demand values/)).toBeVisible();
   await page
-    .getByRole("button", { name: "What-if simulation", exact: false })
-    .click();
+    .getByRole("combobox", { name: "Analysis task" }).selectOption("what_if");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   const scenario = page.getByRole("region", {
     name: "Demand-increase simulation results",
@@ -492,17 +482,16 @@ test("stale forecast explains the gap and keeps editable inputs", async ({
   );
   await page.goto("/");
   await page
-    .getByRole("button", { name: "Demand forecast", exact: false })
-    .click();
+    .getByRole("combobox", { name: "Analysis task" }).selectOption("forecast");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Review the available information" }),
   ).toBeVisible();
   await expect(page.getByText(/stale history/i).first()).toBeVisible();
   await expect(page.getByText(/last observed: 2026-09-23/i)).toBeVisible();
-  await expect(page.locator("form select").nth(0)).toHaveValue("P1");
-  await expect(page.locator("form select").nth(1)).toHaveValue("W3");
-  await page.locator("form select").nth(0).selectOption("P2");
+  await expect(page.getByRole("combobox", { name: "Product", exact: true })).toHaveValue("P1");
+  await expect(page.getByRole("combobox", { name: "Warehouse", exact: true })).toHaveValue("W3");
+  await page.getByRole("combobox", { name: "Product", exact: true }).selectOption("P2");
   await page.getByRole("button", { name: "Run analysis", exact: true }).click();
   await expect(page.getByText("success", { exact: true })).toBeVisible();
 });

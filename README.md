@@ -1,6 +1,6 @@
 # Sentinel
 
-Local, single-user supply-chain analysis for **SIGSEGV · CMPS 4200 HCI**, owned by **Sarseej Shrestha**. The `sentinel-participant-readiness` branch extends the validated implementation with recommendation-bound evidence, stable keyboard focus, zero-demand chart rendering and identifiable history. It has not been merged or published as the default branch. The five browser-to-decision workflows use synthetic data referenced to **2026-09-30**. That is the dataset reference date, not today's date. All decisions are simulations.
+Local, single-user supply-chain analysis for **SIGSEGV · CMPS 4200 HCI**, owned by **Sarseej Shrestha**. The `sentinel-phase3-gruvbox` branch adds the Phase 3 workspace and connected Supply Chain Map on top of `sentinel-participant-readiness`. It has not been merged or published as the default branch. The five browser-to-decision workflows use synthetic data referenced to **2026-09-30**. That is the dataset reference date, not today's date. All decisions are simulations.
 
 ## Run the application
 
@@ -18,6 +18,12 @@ npm --prefix frontend run build
 ```
 
 Open **http://127.0.0.1:8765**. FastAPI serves the compiled React assets; no separate production Node server is needed. `--init` creates missing synthetic data in `data/processed/v1/` and never replaces an existing database. Subsequent launches use `.venv/bin/python -m sentinel.web`. Use `--data-dir PATH --port 8765` for a separate local workspace. Do not point the legacy CLI at the product's analytics database.
+
+The visible workspace has three destinations: **Analyze**, **Supply Chain Map**, and **History**. Analyze keeps all five workflows in one labeled task selector. The result leads with its answer, scope, and material limitation; source records and diagnostic detail remain available through evidence and labeled disclosures. **Study response controls** can deliberately make the next request slow, uncertain, or temporarily unavailable; each selection applies once, and the following normal request uses the real backend. These controls are transparent synthetic study probes, not predictive model results. Normal use requires no live key and does not load Qwen or BGE.
+
+The Supply Chain Map opens with a small network of recorded supplier, warehouse, shipment, order, and line-item records. Search and **Expand** reveal one step of actual relationships; the inspector shows the selected record and source identity. Drag a box to move its wires, pan the background, zoom, or use **Fit view**. Socket dragging and keyboard **Connect to…** create explicitly dashed **Exploratory** wires. They can be removed and are stored with layout positions in this browser tab's session, separately from operational data, recommendations, and audit history. A relationship list and source inspector allow exploration without dragging. Missing or ambiguous source relationships are labeled, never inferred. The map reads the current synthetic dataset; saved historical review evidence remains bound to its captured snapshot.
+
+Phase 3 interface tokens: Gruvbox Dark canvas `#282828`, panels `#3c3836`, primary text `#ebdbb2`, secondary text `#d5c4a1`, accent `#fabd2f`, success `#b8bb26`, and error `#fb4934`. The UI uses the existing sans-serif font stack and a compact type hierarchy (14, 16, 20, 28, 40 px) with a 4/8/16/24/32 px spacing scale. Yellow buttons use dark text. Statuses and chart series have text labels in addition to color.
 
 ## Supported tasks
 

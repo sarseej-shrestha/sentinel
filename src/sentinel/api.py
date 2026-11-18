@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import Field, JsonValue
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from sentinel import map as supply_map
 from sentinel.application import Application
 from sentinel.config import AS_OF
 from sentinel.nlq.registry import ENTITIES
@@ -228,6 +229,22 @@ def create_app(database, state, static_dir=None):
             "synthetic": True,
             "application_version": "1.0",
         }
+
+    @app.get("/api/map/seed")
+    def map_seed():
+        return supply_map.seed(database)
+
+    @app.get("/api/map/search")
+    def map_search(q: str = Query(min_length=1, max_length=60)):
+        return supply_map.search(database, q)
+
+    @app.get("/api/map/expand/{kind}/{identity}")
+    def map_expand(kind: str, identity: str):
+        return supply_map.expand(database, kind, identity)
+
+    @app.get("/api/map/record/{kind}/{identity}")
+    def map_record(kind: str, identity: str):
+        return supply_map.record(database, kind, identity)
 
     @app.post("/api/analyses", response_model=Analysis)
     def analyze(task: Task):
