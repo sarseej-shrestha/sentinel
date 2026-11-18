@@ -1,0 +1,216 @@
+{
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "cases": [
+    {
+      "case": 1,
+      "question": "What can you help me do here?",
+      "answer": "I can help you perform supply-chain analyses using Sentinel's tools. For example, I can guide you through running an analysis task like Supplier Late Deliveries, Inventory Coverage, Demand Forecast, Supplier Investigation, or Demand-increase Simulation. I can also assist with reviewing published data, such as observed shipment lateness or demand forecasts, or help you interpret results from the Supply Chain Map.\n\nIf you have a specific question—like how to set up a demand forecast, investigate a supplier’s performance, or import relationships from an Excel file—please let me know. I can also help you navigate the workspace, such as selecting a target, reviewing transaction records, or adjusting the theme to Light or Dark.\n\nIf you're unsure what to do next, please clarify: What kind of supply-chain question or action are you trying to perform?",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 2,
+      "question": "How do I upload an Excel file to create a map?",
+      "answer": "To upload an Excel file and create a map in Sentinel, follow these steps:\n\n1. Go to **Supply Chain Map** in the workspace.  \n2. Click **Import relationships**.  \n3. Choose your Excel file (`.xlsx`) or a UTF-8 `.csv` file.  \n4. When prompted, select the worksheet within the file.  \n5. Validate and preview the data to check for errors or mismatches.  \n6. Review row counts and ensure all required headers are present:  \n   - `source_type`, `source_id`, `relationship`, `target_type`, `target_id`, `source_label`, `target_label`  \n7. Confirm the labels are consistent for each identity (e.g., \"Supplier\" and \"Warehouse\").  \n8. Fix any numbered errors or formatting issues before proceeding.  \n9. Name your map and click **Create map**.  \n\nNote: The import does not affect predictive models or analysis results. The file must be under 96 KiB and contain no more than 40 relationship rows. Replace formulas with literal values and use exact header names as in the template.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 3,
+      "question": "What does days of coverage mean?",
+      "answer": "Days of coverage means the number of days a company can operate based on its current on-hand inventory, divided by the average daily demand. It indicates how long inventory will last at the current demand rate, assuming no new stock is received. A higher number means greater buffer against stockouts. \n\nThis metric is calculated in the Inventory coverage task in Sentinel. If the average daily demand is zero, coverage cannot be computed. The result is a numerical value showing days of inventory available.\n\nNote: This is general knowledge and does not come from a specific dataset or record in Sentinel.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 4,
+      "question": "What columns does my spreadsheet need?",
+      "answer": "Your spreadsheet must include the following required columns:  \n- source_type  \n- source_id  \n- relationship  \n- target_type  \n- target_id  \n- source_label  \n- target_label  \n\nThese headers are mandatory and must match exactly to the template. All values must be literal (no formulas), and both endpoints (source and target) must have consistent labels. Optional columns—event_date, quantity, and notes—can be included but are not required.  \n\nEnsure your data does not exceed 96 KiB in size and includes no more than 40 relationship rows. If you have a specific use case (e.g., supplier supplies warehouse), confirm that the relationship type (e.g., \"supplies\") and labels (e.g., \"supplier\", \"warehouse\") align with your intended connections.  \n\nIf you share a sample row or your intended relationship type, I can verify it matches the expected format.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 5,
+      "question": "How do I switch to light mode?",
+      "answer": "Switch to light mode by toggling the theme control at the top of the workspace from Dark to Light. This changes the interface to use the Gruvbox light theme.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 6,
+      "question": "Explain this forecast in plain English.",
+      "answer": "This forecast predicts how many units of a product will be sold in the future, based on past sales data. It uses a machine learning method called quantile histogram gradient boosting to make the prediction, which looks at historical patterns and adjusts for trends like seasonality. The forecast gives a single point estimate — the median of all possible future sales — and also shows a range of values, called quantile bounds, that represent the most plausible outcomes. This range isn’t a confidence interval about the model itself, but rather a range of what actual sales might actually be, based on past data. \n\nThe point estimate isn’t necessarily the most likely value — it’s the median, meaning half the possible outcomes are above it and half below. The bounds show the spread of possible sales, and while values might fall outside this range, the model has been tested on historical data to see how often it captured the true sales. This historical evaluation shows that the machine learning method performed better than a simple method that just repeats the previous week’s sales. \n\nImportant to note: this forecast is based on synthetic retail data, not real-time sales. Historical sales may not fully reflect actual demand, and the forecast doesn’t account for changes in market conditions or new trends. It’s a prediction, not a guarantee.\nS001 / P0001 has a 14-day forecast of units sold per day from historical origin 2023-12-18. Active method: quantile histogram gradient boosting.\nFirst forecast day 2023-12-19: estimate 108.36 units sold; seasonal-naive baseline 212.00; estimated lower and upper bounds 19.16 to 304.66 units.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open Kaggle dataset documentation"
+      ]
+    },
+    {
+      "case": 7,
+      "question": "How is it different from the baseline?",
+      "answer": "The forecast uses a machine learning model called quantile histogram gradient boosting, which is more accurate than the baseline method — a simple seasonal-naive model that just repeats the sales from the previous week. In historical testing, the machine learning model had lower errors (measured by MAE and RMSE) than the baseline, meaning it made more precise predictions. The baseline doesn’t account for trends or changes in demand, so it’s less responsive to real-world shifts. The machine learning model, by contrast, learns from past patterns and adjusts for variations, resulting in a more reliable forecast. \n\nThis difference is based on a held-out test of synthetic retail data, which means it's evaluated on data not used during training. While the baseline repeats the past, the model builds a more nuanced understanding of demand patterns.\nFirst forecast day 2023-12-19: estimate 108.36 units sold; seasonal-naive baseline 212.00; estimated lower and upper bounds 19.16 to 304.66 units.\nHistorical final evaluation across 1,400 forecasts: boosting MAE 83.46 and RMSE 106.62 units; seasonal naive MAE 115.26 and RMSE 146.06 units. Empirical interval coverage was 81.9% for boosting and 83.0% for seasonal naive.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open Kaggle dataset documentation"
+      ]
+    },
+    {
+      "case": 8,
+      "question": "Can I trust it?",
+      "answer": "You can trust the forecast as a reasonable estimate of future demand based on historical patterns, but with important limitations. The forecast is built on synthetic retail data, not real-world live operations, and historical sales may understate actual demand. The model has been tested against held-out historical data, where it outperformed a simple baseline, showing it captures demand patterns better than repeating the previous week. However, this evaluation does not prove how the model will perform in real time or under changing conditions.  \n\nThe prediction interval (the range of values) reflects uncertainty in sales, not model confidence. Values can fall outside this range, and the model does not account for unobserved events like supply disruptions or sudden market shifts. Therefore, while the forecast is more accurate than a simple baseline, it should be used as a guide, not a guarantee. For operational decisions, it's best paired with real-time monitoring and safety buffers.\nHistorical final evaluation across 1,400 forecasts: boosting MAE 83.46 and RMSE 106.62 units; seasonal naive MAE 115.26 and RMSE 146.06 units. Empirical interval coverage was 81.9% for boosting and 83.0% for seasonal naive.\nEmpirical quantile bounds describe historical forecast uncertainty. Results are from synthetic retail data. Units sold can understate demand, and historical evaluation does not establish live performance.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open Kaggle dataset documentation"
+      ]
+    },
+    {
+      "case": 9,
+      "question": "What does that interval mean?",
+      "answer": "The interval represents a range of plausible future sales, based on historical patterns. It is formed by the lower and upper quantile estimates, showing the central range of what units sold might actually be. The median point estimate within this range is not the most likely value, but rather the middle of the distribution — meaning half the possible outcomes are above it and half are below. This range reflects the uncertainty in demand, not a confidence level about the model.  \n\nValues can fall outside this interval, and the interval's width shows how much variation is expected. The empirical coverage — how often past actual sales fell within this range — was measured in historical data, but that doesn’t guarantee future performance. The interval is not a prediction of error or confidence in the model, but a description of what sales might realistically look like, based on past behavior.\nThe model uses 0.1, 0.5 and 0.9 quantile fits to estimate the lower bound, median and upper bound. The displayed span is intended to cover the central 80% under the model. The median need not equal the midpoint of the bounds. This is a prediction interval for a future observation, and the actual value can fall outside it.\nFirst forecast day 2023-12-19: estimate 108.36 units sold; seasonal-naive baseline 212.00; estimated lower and upper bounds 19.16 to 304.66 units.\nEmpirical quantile bounds describe historical forecast uncertainty. Results are from synthetic retail data. Units sold can understate demand, and historical evaluation does not establish live performance.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open Kaggle dataset documentation"
+      ]
+    },
+    {
+      "case": 10,
+      "question": "Which supplier am I looking at, and what supports this result?",
+      "answer": "You are looking at Supplier B. This result is supported by the saved supplier delay analysis on the Sentinel synthetic fixture, which evaluates late deliveries for Supplier B within a specified promised-date period. The aggregate late and evaluable delivery counts are derived from observed deliveries, with exclusions and unassignable dates accounted for. \n\nThe evidence is based on recorded shipment records, which include delivered dates and quantities. However, the shipment data does not include open, cancelled, or outstanding orders, nor does it link purchase orders to receipts. Therefore, the result reflects only completed, evaluable deliveries and does not establish outstanding overdue orders. \n\nThis result is derived from the synthetic fixture used in the Supplier delay analysis task, not from live or published data. The support comes from the analysis configuration and the recorded transaction records, which are accessible via the Evidence tool when needed.\nSaved supplier delay analysis on the Sentinel synthetic fixture, reference date 2026-09-30. Promised-date period 2026-08-01 to 2026-08-31.\nSupplier B (S2): 7 late of 31 evaluable deliveries, 0 excluded and 0 with unassignable dates.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open captured evidence"
+      ]
+    },
+    {
+      "case": 11,
+      "question": "Show me the records behind that number.",
+      "answer": "The records behind the number are available through the Evidence tool. To access them, select the captured target from the analysis result, then click \"Evidence\" to open the registered examples. The evidence page displays a bounded set of source records—these are actual transaction records from the synthetic fixture used in the analysis. \n\nNote: The examples shown are a sample of the captured records; they do not represent totals or aggregated values. To see the full set, you must inspect the evidence link provided in the Evidence panel. The records include delivered dates, supplier identifiers, and relationship types, but do not include open, cancelled, or outstanding orders—these statuses are not available in the dataset.\n\nIf you'd like, I can help you interpret a specific record from the examples. Just let me know which one.\nCaptured shipment evidence for S2: 31 records in this category and target, including any excluded records. This page shows 4 examples at offset 0.\nshipment id SH367, promised date 2026-08-01, delivered date 2026-07-30\nshipment id SH370, promised date 2026-08-02, delivered date 2026-08-02\nshipment id SH373, promised date 2026-08-03, delivered date 2026-08-06\nshipment id SH376, promised date 2026-08-04, delivered date 2026-08-02\nSupplier B (S2): 7 late of 31 evaluable deliveries, 0 excluded and 0 with unassignable dates.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open captured source records",
+        "Open captured evidence"
+      ]
+    },
+    {
+      "case": 12,
+      "question": "Are these outstanding overdue orders?",
+      "answer": "No, these are not outstanding overdue orders. The shipment data does not include open, cancelled, or outstanding receipt statuses. Missing delivered dates do not establish outstanding overdue orders. Purchase orders are not linked to receipts. Therefore, the status of any order cannot be determined as overdue or outstanding based on the available data.\nThese are observed deliveries. The shipment data has no open or cancelled status or receipt quantities. Missing delivered dates do not establish outstanding overdue orders. Purchase orders are not linked to receipts.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open captured evidence"
+      ]
+    },
+    {
+      "case": 13,
+      "question": "Explain this shipment and its connections.",
+      "answer": "This shipment is a recorded connection in Sentinel’s synthetic fixture, representing a verified supply chain event. It has a supplier as the source and a destination warehouse as the target, linked by a recorded relationship. The shipment is tied to a specific order and includes both a promised date and a delivered date, which can be compared to assess on-time performance.\n\nThe connection roles are defined by type: the source is a supplier, and the target is a warehouse. These roles are consistent with the supported types in the supply chain map. The relationship is represented as a solid wire, indicating a recorded, verified connection from the synthetic fixture, not an exploratory or inferred link.\n\nNo quantities or order status are available for this shipment—outstanding order status cannot be determined. The delivered and promised dates are the only verifiable timestamps, and no inference about receipt or fulfillment is possible beyond what is directly recorded.\nShipment SH367 links to supplier S2, destination warehouse W2, and order O367.\nSH367 comes from verified source record shipments:367 in the Sentinel synthetic fixture, reference date 2026-09-30.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open verified map source record"
+      ]
+    },
+    {
+      "case": 14,
+      "question": "Where did this record come from?",
+      "answer": "This record came from a verified record in Sentinel’s synthetic fixture. The source ID and reference date are provided by the application.\nSH367 comes from verified source record shipments:367 in the Sentinel synthetic fixture, reference date 2026-09-30.\nSolid wires represent recorded fixture relationships. Dashed exploratory wires are workspace annotations.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open verified map source record"
+      ]
+    },
+    {
+      "case": 15,
+      "question": "What will Supplier B deliver tomorrow and where is its truck right now?",
+      "answer": "Sentinel does not track real-time truck locations or specific delivery schedules for individual suppliers. The supply-chain data in Sentinel is based on a synthetic fixture and historical records, and live truck locations or exact delivery times for Supplier B are not available. \n\nYou can use the \"Analyze\" task to simulate delivery performance or assess lateness based on scheduled dates, but this does not provide real-time delivery status or current truck location. \n\nTo proceed, please clarify whether you are asking about a scheduled delivery date or a forecasted delivery, and if you have a specific record or transaction ID to examine.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 16,
+      "question": "Which supplier was late last month?",
+      "answer": "I cannot determine which supplier was late last month because Sentinel's analysis of supplier lateness relies on completed records with scheduled and delivered dates. The data for lateness is only available for evaluable, completed records, and there is no current result selected in the workspace. To answer this, you would need to first run the \"Supplier late deliveries\" analysis task, set a supplier and a promised-date period (e.g., last month), and then run the analysis. Afterward, you can view the results in the Analyze tab. Without a selected analysis result, no supplier lateness data is available. \n\nPlease confirm if you have already run the Supplier late deliveries analysis or if you'd like guidance on how to set it up.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 17,
+      "question": "Where did this imported connection come from?",
+      "answer": "This imported connection came from a user-uploaded spreadsheet file. The connection is traceable to specific rows in that spreadsheet, and the application provides the row identifiers and source record links for each record. The data in the spreadsheet was imported using the \"Import relationships\" function in the Supply Chain Map, following the required header specifications. \n\nThe spreadsheet must have included the required fields: source_type, source_id, relationship, target_type, target_id, source_label, and target_label. These fields define the source and target roles in the supply chain network. The imported data does not feed any predictive models or analytical results—it only establishes the recorded connections in the map.\n\nThis is a verified fact from the system: the verified detail below.\nThis selected relationship is supported by uploaded spreadsheet row(s) 2. Imported relationship data is independent of the analytical datasets.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open imported source record"
+      ]
+    },
+    {
+      "case": 18,
+      "question": "Explain what this result means and what data supports it.",
+      "answer": "There is no selected result in the current workspace. To explain a result, you must first choose a task output—such as Supplier late deliveries, Inventory coverage, Demand forecast, or Observed shipment lateness—from the Analyze section. Without a selected result, no data or interpretation can be provided.\n\nIf you have a specific task in mind, please select it from the Analyze menu, run the analysis, and then choose a result to view. Once a result is selected, I can explain what it means and what data supports it—such as delivery dates, stock levels, demand points, or lateness metrics—based on the synthetic fixture or published data used in that task.\n\nPlease specify which task or result you'd like to explore.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 19,
+      "question": "What columns does my spreadsheet need?",
+      "answer": "Your spreadsheet must include the following required columns:  \n- source_type  \n- source_id  \n- relationship  \n- target_type  \n- target_id  \n- source_label  \n- target_label  \n\nThese headers are mandatory and must match exactly to the template. All values must be literal (no formulas), and both endpoints (source and target) must have consistent labels. Optional columns—event_date, quantity, and notes—can be included but are not required.  \n\nEnsure your data does not exceed 96 KiB in size and includes no more than 40 relationship rows. If you have a specific use case (e.g., supplier supplies warehouse), confirm that the relationship type (e.g., \"supplies\") and labels (e.g., \"supplier\", \"warehouse\") align with your intended connections.  \n\nIf you share a sample row or your intended relationship type, I can verify it matches the expected format.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 20,
+      "question": "How do I save a recommendation and revisit it later?",
+      "answer": "To save a recommendation, go to the analysis result, enter a Reviewer name and a Review note in the fields provided, then click \"Save pending draft.\" Saved reviews persist in your local workspace and are stored independently of the current session.\n\nTo revisit a saved recommendation later, open the History section, locate the entry matching your review, and click \"Open review\" to view the captured evidence and your notes. The history replay shows the exact snapshot from when the review was saved and does not rerun the analysis.\n\nNote: Only unsaved text is stored in browser session storage and will not persist after closing the browser. Saved reviews are saved locally and remain accessible until manually deleted.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 21,
+      "question": "How do I fix an import row with a formula or a conflicting label?",
+      "answer": "To fix an import row with a formula, replace the formula with a literal value. For example, if a cell contains `=A1+B1`, change it to a static value like `10`. Formulas are not supported in the import file—only numeric, text, or date values.\n\nFor conflicting labels, ensure both the source and target labels are consistent across all records. For instance, if one record uses \"Warehouse A\" and another uses \"WA\", standardize them to match the expected label format. Labels must be consistent for each identity to maintain accurate relationships in the supply chain map.\n\nAlways validate and preview the import after making these changes to catch errors before creating the map.",
+      "notice": null,
+      "missing": [],
+      "citations": []
+    },
+    {
+      "case": 22,
+      "question": "Where do the published datasets come from?",
+      "answer": "The published datasets in Sentinel come from two sources:  \n\n- A synthetic retail dataset generated for demonstration purposes, licensed under Public Domain. This data is created to simulate real-world retail demand and is used for published analysis tasks like demand forecasting and coverage evaluation.  \n- A shipment dataset from the Kaggle uploader, attributed to USAID, which includes health commodity shipments. This dataset is used for shipment evaluation and lateness analysis.  \n\nThese datasets are not live operational data but are provided for educational and analytical use. They are held apart from the live supply-chain operations and are used only in published analysis tasks.  \n\nNote: The synthetic retail data is not derived from real retail operations, and the USAID shipment data is sourced from Kaggle, with redistribution permissions unresolved.\nPublisher-generated synthetic retail; 73,100 accepted records, 2022-01-01 to 2024-01-01. License: CC0: Public Domain.\nSCMS health commodity shipments attributed to USAID by the Kaggle uploader; 10,324 accepted records, 2006-05-02 to 2015-09-14. License: Data files © Original Authors; redistribution permission unresolved.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open dataset documentation",
+        "Open dataset documentation"
+      ]
+    },
+    {
+      "case": 23,
+      "question": "Why did coverage change in this what-if?",
+      "answer": "Coverage changed in this what-if because the demand rate was altered while stock levels and replenishment were held constant. The what-if scenario assumes no new stock arrives, so any increase in demand directly reduces coverage days. Since coverage is calculated as on-hand stock divided by average daily demand, a higher demand rate results in fewer days of coverage. \n\nThis change is consistent with the published demand-what-if task, which modifies the demand rate based on historical sales patterns but does not adjust inventory or predict future restocking. The original coverage value was derived from prior observed sales, and the new value reflects the impact of the increased demand under the same stock level.\nThis uses prior 28-day observed sales, with stock fixed and no replenishment in the scenario. It does not predict when stock will run out.\nAt S001 / P0001 on 2023-12-18, 440 opening units divided by 143.89 average daily units sold give 3.06 days of coverage. At 20% higher sales, the scenario has 2.55 days.",
+      "notice": null,
+      "missing": [],
+      "citations": [
+        "Open Kaggle dataset documentation"
+      ]
+    }
+  ],
+  "runtime": "Ollama 0.17.7 on Apple M4 Max, 36 GB unified memory"
+}

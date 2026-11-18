@@ -21,7 +21,12 @@ import {
   X,
 } from "lucide-react";
 import { Sources, type Target } from "./Sources";
-import { Chat, type MapContext, type PublishedContext } from "./Chat";
+import {
+  Chat,
+  type ChatCitation,
+  type MapContext,
+  type PublishedContext,
+} from "./Chat";
 import { PublishedData } from "./PublishedData";
 import { MapWorkspace } from "./MapImport";
 import { api, ApiError } from "./api";
@@ -912,6 +917,7 @@ export default function App() {
   );
   const [publishedContext, setPublishedContext] = useState<PublishedContext>();
   const [mapContext, setMapContext] = useState<MapContext>();
+  const [chatTarget, setChatTarget] = useState<string | null>();
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
@@ -965,6 +971,8 @@ export default function App() {
     setExisting(undefined);
     setReviewSelection("");
     setReplay(false);
+    setChatTarget(undefined);
+    setEvidence(null);
   }
   function choose(next: Kind) {
     reset();
@@ -1027,7 +1035,11 @@ export default function App() {
       if (id === sequence.current) setLoading(false);
     }
   }
-  async function openSnapshot(id: string, action?: Action) {
+  async function openSnapshot(
+    id: string,
+    action?: Action,
+    citation?: ChatCitation,
+  ) {
     reset();
     setView("workspace");
     setLoading(true);
@@ -1043,6 +1055,19 @@ export default function App() {
         throw new Error(
           "Saved review evidence does not match its verified analysis snapshot.",
         );
+      if (
+        citation &&
+        (citation.scope.version !== next.dataset_fingerprint ||
+          citation.scope.evidence_id !== next.evidence_id ||
+          (citation.scope.target_id &&
+            !next.targets?.some(
+              (target) => target.id === citation.scope.target_id,
+            )))
+      ) {
+        throw new Error(
+          "The chat source no longer matches the saved analysis.",
+        );
+      }
       setResult(next);
       setExisting(action);
       setReplay(true);
@@ -1050,7 +1075,10 @@ export default function App() {
         setKind(next.task.kind);
         setForms((f) => ({ ...f, [next.task!.kind]: next.task! }));
       }
-      setTimeout(() => resultHeading.current?.focus(), 0);
+      if (citation?.scope.evidence_id) {
+        setChatTarget(citation.scope.target_id ?? undefined);
+        setEvidence(citation.scope.evidence_id);
+      } else setTimeout(() => resultHeading.current?.focus(), 0);
     } catch (e) {
       if (serial === sequence.current) setError((e as Error).message);
     } finally {
@@ -1835,6 +1863,23 @@ export default function App() {
         </main>
       </div>
       <Chat
+        workspace={view}
+        contextLabel={
+          view === "workspace" && result
+            ? task.title
+            : view === "published"
+              ? publishedContext
+                ? `Published data · ${publishedContext.kind}`
+                : "Published data"
+              : view === "map"
+                ? mapContext
+                  ? mapContext.map_id
+                    ? "Imported map record"
+                    : `Map · ${mapContext.kind} ${mapContext.record_id}`
+                  : "Map · no record selected"
+                : "Workspace help"
+        }
+        targetId={view === "workspace" ? reviewTargetId : undefined}
         analysisId={
           view === "workspace" && result?.evidence_id
             ? result.analysis_id
@@ -1842,15 +1887,21 @@ export default function App() {
         }
         published={view === "published" ? publishedContext : undefined}
         mapRecord={view === "map" ? mapContext : undefined}
-        onEvidence={(id) => void openSnapshot(id)}
+        onEvidence={(citation) => {
+          if (citation.scope.analysis_id)
+            void openSnapshot(citation.scope.analysis_id, undefined, citation);
+        }}
       />
       {evidence && (
         <EvidenceDialog
           id={evidence}
           targets={result?.targets ?? []}
-          reviewTargetId={reviewTargetId}
-          unresolvedReviewTarget={unresolvedReviewTarget}
-          onClose={() => setEvidence(null)}
+          reviewTargetId={chatTarget ?? reviewTargetId}
+          unresolvedReviewTarget={chatTarget ? false : unresolvedReviewTarget}
+          onClose={() => {
+            setChatTarget(undefined);
+            setEvidence(null);
+          }}
         />
       )}
     </div>

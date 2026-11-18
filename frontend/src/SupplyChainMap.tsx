@@ -261,6 +261,7 @@ export function SupplyChainMap({
     }
     if (recorded) {
       setSelected({ type: "edge", id: recorded.id });
+      selectSource(recorded.evidence_kind, recorded.evidence_id);
       return;
     }
     const newEdge: MapEdge = {
@@ -272,7 +273,21 @@ export function SupplyChainMap({
     };
     setEdges((current) => [...current, newEdge]);
     setSelected({ type: "edge", id: newEdge.id });
+    selectSource();
   }
+  function selectSource(kind?: string, id?: string) {
+    inspected.current++;
+    onSource(
+      kind && id
+        ? {
+            kind,
+            record_id: id,
+            map_id: importedName ? endpoint.split("/").at(-1) : undefined,
+          }
+        : undefined,
+    );
+  }
+
   async function inspect(kind: string, id: string) {
     const request = ++inspected.current;
     setDetail(null);
@@ -283,8 +298,7 @@ export function SupplyChainMap({
         record: Record<string, unknown> | null;
       }>(`${endpoint}/record/${kind}/${encodeURIComponent(id)}`);
       if (request !== inspected.current) return;
-      if (result.status === "valid" && !importedName)
-        onSource({ kind, record_id: id });
+      if (result.status === "valid") selectSource(kind, id);
       setDetail(
         result.record ?? {
           status: result.status,
@@ -390,6 +404,9 @@ export function SupplyChainMap({
               onClick={() => {
                 merge({ nodes: [item], edges: [], warnings: [] });
                 setSelected({ type: "node", id: item.id });
+                if (item.status === "valid")
+                  selectSource(item.kind, item.record_id);
+                else selectSource();
                 setMatches([]);
               }}
             >
@@ -457,6 +474,7 @@ export function SupplyChainMap({
                     className={`map-wire ${item.type} ${selected?.id === item.id ? "selected" : ""}`}
                     onClick={() => {
                       setSelected({ type: "edge", id: item.id });
+                      selectSource(item.evidence_kind, item.evidence_id);
                       setDetail(null);
                     }}
                   />
@@ -489,6 +507,9 @@ export function SupplyChainMap({
                     }}
                     onClick={() => {
                       setSelected({ type: "node", id: item.id });
+                      if (item.status === "valid")
+                        selectSource(item.kind, item.record_id);
+                      else selectSource();
                       setDetail(null);
                     }}
                     aria-label={`Select and drag ${item.kind} ${item.label}`}
@@ -612,6 +633,7 @@ export function SupplyChainMap({
                           current.filter((item) => item.id !== edge.id),
                         );
                         setSelected(null);
+                        selectSource();
                       }}
                     >
                       Remove exploratory connection
@@ -641,6 +663,7 @@ export function SupplyChainMap({
                     key={item.id}
                     onClick={() => {
                       setSelected({ type: "edge", id: item.id });
+                      selectSource(item.evidence_kind, item.evidence_id);
                       setDetail(null);
                     }}
                   >

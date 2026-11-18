@@ -262,7 +262,7 @@ def create_app(database, state, static_dir=None):
 
     @app.post("/api/chat", response_model=ChatResponse)
     async def ask_qwen(body: ChatRequest, request: Request):
-        return await chat.respond(body, service, published, request)
+        return await chat.respond(body, service, published, imported_maps, request)
 
     @app.get("/api/published/catalog")
     def published_catalog():

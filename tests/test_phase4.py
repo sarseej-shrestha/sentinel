@@ -4,12 +4,11 @@ import httpx
 import numpy as np
 import pandas as pd
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from scripts.train_phase4 import errors, ship_features, temporal_partitions
 from sentinel.api import create_app
-from sentinel.chat import Chat, Choice
+from sentinel.chat import Chat
 from sentinel.data.build_duckdb import build_database
 from sentinel.published import Published
 
@@ -18,93 +17,185 @@ HEADERS = {"X-Sentinel-Client": "workspace"}
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.delenv("SENTINEL_QWEN_URL", raising=False)
+    monkeypatch.setenv("SENTINEL_QWEN_URL", "http://provider.invalid/v1/chat/completions")
     monkeypatch.setenv("SENTINEL_PUBLISHED_DIR", str(tmp_path))
     db = build_database(tmp_path / "fixture.duckdb")
     with TestClient(create_app(db, tmp_path / "state.sqlite3")) as test_client:
         yield test_client
 
 
-def test_chat_contract_and_unavailable(client):
-    assert client.post("/api/chat", headers=HEADERS, json={"message": "  "}).status_code == 422
-    assert client.post("/api/chat", headers=HEADERS, json={"message": "a" * 601}).status_code == 422
-    assert (
-        client.post(
-            "/api/chat", headers=HEADERS, json={"message": "Help", "previous": ["a"] * 3}
-        ).status_code
-        == 422
-    )
-    response = client.post("/api/chat", headers=HEADERS, json={"message": "Help"})
-    assert response.status_code == 503
-    assert "unavailable" in response.json()["detail"]
-    assert client.get("/api/published/catalog").status_code == 503
-    assert client.get("/api/published/shipment-score?record_id=-1").status_code == 422
+def send(client, message, **scope):
+    return client.post("/api/chat", headers=HEADERS, json={"message": message, **scope})
 
 
-def test_model_cannot_invent_a_citation(client, monkeypatch):
-    async def unsupported_fact(self, payload):
-        return Choice(mode="use", facts=["result"])
-
-    monkeypatch.setattr(Chat, "select", unsupported_fact)
-    response = client.post("/api/chat", headers=HEADERS, json={"message": "Invent a result"})
-    assert response.status_code == 502
-    assert "unavailable evidence" in response.json()["detail"]
-    assert (
-        client.post(
-            "/api/chat", headers=HEADERS, json={"message": "Explain", "analysis_id": "fake"}
-        ).status_code
-        == 404
-    )
-
-
-def test_grounding_cites_existing_verified_snapshot(client, monkeypatch):
+@pytest.fixture
+def shipment(client):
     task = {
         "kind": "supplier_delay",
         "supplier_id": "S2",
         "start_date": "2026-08-01",
         "end_date": "2026-08-31",
     }
-    result = client.post("/api/analyses", headers=HEADERS, json=task).json()
+    return client.post("/api/analyses", headers=HEADERS, json=task).json()
 
-    async def select(self, payload):
-        assert "S2" in payload["available_facts"]["scope"]
-        # Evidence is server-resolved. Arbitrary model text or URLs have no field in Choice.
-        return Choice(mode="limits", facts=["scope", "scope"])
 
-    monkeypatch.setattr(Chat, "select", select)
-    response = client.post(
-        "/api/chat",
-        headers=HEADERS,
-        json={"message": "What period?", "analysis_id": result["analysis_id"]},
+def test_chat_contract_and_unavailable(client, monkeypatch):
+    async def offline(self, http, body, context, **kwargs):
+        raise httpx.ConnectError("unreachable")
+
+    monkeypatch.setattr(Chat, "complete", offline)
+    assert send(client, "  ").status_code == 422
+    assert send(client, "a" * 601).status_code == 422
+    assert send(client, "Help", history=[{"question": "a", "answer": "b"}] * 5).status_code == 422
+    assert send(client, "Help", target_id="supplier:S2").status_code == 422
+    response = send(client, "Help")
+    assert response.status_code == 503
+    assert "configured model" in response.json()["detail"]
+    assert client.get("/api/published/catalog").status_code == 503
+
+
+def test_free_text_help_with_no_selected_facts(client, monkeypatch):
+    async def plain(self, http, body, context, **kwargs):
+        assert context.facts == {}
+        return {"content": "Open Supply Chain Map, then choose Import relationships."}
+
+    monkeypatch.setattr(Chat, "complete", plain)
+    result = send(client, "How do I upload an Excel file?").json()
+    assert "Import relationships" in result["answer"]
+    assert result["citations"] == [] and result["notice"] is None
+
+
+@pytest.mark.parametrize(
+    "legacy",
+    [
+        '{"mode":"limits","facts":["columns"]}',
+        "The selected supplier is unsafe. [[F99]]",
+    ],
+)
+def test_legacy_schema_and_unknown_reference_repair(client, monkeypatch, legacy):
+    attempts = []
+
+    async def generated(self, http, body, context, *, offer_tool, repair):
+        attempts.append(repair)
+        return {
+            "content": legacy
+            if len(attempts) == 1
+            else "Download the relationship template to see the required headers."
+        }
+
+    monkeypatch.setattr(Chat, "complete", generated)
+    body = send(client, "What columns does my spreadsheet need?").json()
+    assert len(attempts) == 2 and attempts[1]
+    assert "template" in body["answer"] and "unsafe" not in body["answer"]
+    assert body["citations"] == []
+
+
+def test_bad_reference_drops_dependent_prose_after_one_repair(client, monkeypatch, shipment):
+    attempts = []
+
+    async def generated(self, http, body, context, **kwargs):
+        attempts.append(kwargs)
+        return {
+            "content": "These are outstanding overdue orders. [[F999]]\n\nGeneral guidance: Inspect delivery status before acting."
+        }
+
+    monkeypatch.setattr(Chat, "complete", generated)
+    body = send(client, "What supports this result?", analysis_id=shipment["analysis_id"]).json()
+    assert len(attempts) == 2
+    assert "outstanding overdue orders" not in body["answer"]
+    assert body["answer"] == "General guidance: Inspect delivery status before acting."
+    assert body["notice"] and body["verified"]
+    assert all(ref["scope"]["evidence_id"] == shipment["evidence_id"] for ref in body["citations"])
+
+
+def test_scoped_records_preserve_target_and_evidence_version(client, monkeypatch, shipment):
+    async def generated(self, http, body, context, **kwargs):
+        assert not kwargs["offer_tool"]  # Explicit request already retrieved a page.
+        assert context.scope.target_id == "supplier:S2"
+        assert any("This page shows 4 examples" in fact.text for fact in context.facts.values())
+        return {"content": "The captured evidence includes completed deliveries. [[F2]]"}
+
+    monkeypatch.setattr(Chat, "complete", generated)
+    identity = shipment["analysis_id"]
+    result = send(client, "Show me the records behind that number.", analysis_id=identity).json()
+    assert any("7 late of 31" in value for value in result["verified"])
+    assert any("4 examples" in value for value in result["verified"])
+    assert all(
+        ref["scope"]["version"] == shipment["dataset_fingerprint"] for ref in result["citations"]
     )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["answer"].count("S2") == 1
-    assert body["citations"][0]["analysis_id"] == result["analysis_id"]
+    assert result["scope"]["source_id"]
+    assert send(client, "Explain", analysis_id=identity, target_id="supplier:S1").status_code == 422
+    assert send(client, "Explain", analysis_id="fake").status_code == 404
 
 
-def test_untrusted_provider_payload_maps_to_recoverable_error(client, monkeypatch):
-    async def fake_post(self, url, **kwargs):
-        return httpx.Response(
-            200,
-            request=httpx.Request("POST", url),
-            json={
-                "choices": [
-                    {
-                        "message": {
-                            "content": '{"mode":"help","facts":[],"url":"https://example.invalid"}'
-                        }
-                    }
+@pytest.mark.parametrize("arguments", ['{"offset":', '{"offset":-1}', '{"analysis_id":"other"}'])
+def test_malformed_tool_request_has_one_bounded_repair(client, monkeypatch, shipment, arguments):
+    attempts = []
+
+    async def generated(self, http, body, context, *, offer_tool, repair):
+        attempts.append((offer_tool, repair))
+        if offer_tool:
+            return {
+                "tool_calls": [{"function": {"name": "captured_records", "arguments": arguments}}]
+            }
+        return {"content": "The count comes from the saved delivery evidence. [[F2]]"}
+
+    monkeypatch.setattr(Chat, "complete", generated)
+    result = send(client, "What supports this result?", analysis_id=shipment["analysis_id"]).json()
+    assert attempts[0] == (True, None) and attempts[1][0] is False and attempts[1][1]
+    assert len(attempts) == 2 and result["notice"] is None
+    assert result["scope"]["target_id"] == "supplier:S2"
+
+
+def test_native_tool_runs_one_bounded_page(client, monkeypatch, shipment):
+    sent = []
+
+    async def generated(self, http, body, context, *, offer_tool, repair):
+        sent.append(offer_tool)
+        if offer_tool:
+            return {
+                "tool_calls": [
+                    {"function": {"name": "captured_records", "arguments": {"offset": 4}}}
                 ]
-            },
-        )
+            }
+        handle = next(key for key, fact in context.facts.items() if "offset 4" in fact.text)
+        return {"content": f"These are examples from the captured deliveries. [[{handle}]]"}
 
-    monkeypatch.setenv("SENTINEL_QWEN_URL", "http://testserver/v1/chat/completions")
+    monkeypatch.setattr(Chat, "complete", generated)
+    result = send(client, "What supports this result?", analysis_id=shipment["analysis_id"]).json()
+    assert sent == [True, False]
+    assert any("offset 4" in value for value in result["verified"])
+
+
+def test_provider_truncation_never_renders_cut_response(client, monkeypatch):
+    calls = []
+
+    async def fake_post(self, url, **kwargs):
+        calls.append(kwargs["json"])
+        choice = {"message": {"content": "An incomplete"}}
+        if len(calls) == 1:
+            choice["finish_reason"] = "length"
+        else:
+            choice["message"]["content"] = (
+                "Coverage means how long existing stock can meet typical demand."
+            )
+        return httpx.Response(200, request=httpx.Request("POST", url), json={"choices": [choice]})
+
     monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
-    with pytest.raises(HTTPException, match="unusable response"):
-        import asyncio
-
-        asyncio.run(Chat().select({"question": "Help"}))
+    result = send(
+        client,
+        "What does coverage mean?",
+        history=[{"question": "What is a warehouse?", "answer": "A stock location."}],
+    ).json()
+    assert len(calls) == 2
+    assert calls[0]["max_tokens"] == 420
+    assert [turn["role"] for turn in calls[0]["messages"]] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert "typical demand" in result["answer"] and "incomplete" not in result["answer"]
 
 
 def test_linked_orders_and_late_labels_are_excluded():

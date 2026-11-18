@@ -1782,3 +1782,22 @@ main:has(.map-page) > .map-source-controls {
   gap: 8px;
   margin: 7px 0;
 }
+
+.chat-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+.chat-facts {
+  border-left: 2px solid var(--border);
+  margin: 8px 0;
+  padding-left: 10px;
+}
+.chat-turns article a {
+  display: inline-block;
+  margin-right: 8px;
+}

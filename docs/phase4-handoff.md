@@ -22,21 +22,22 @@ sh scripts/download_phase4.sh
 
 The public version-1 archives were accessible without Kaggle credentials on 2026-11-18. The trainer verifies the decompressed CSV checksums. If the public endpoint later changes or requires authentication, download the same version through an authorized Kaggle account and place the archives in `data/raw/phase4/retail.zip` and `data/raw/phase4/shipment.zip`. Training uses seed 4200. It writes a versioned local model bundle, manifest with a bundle digest, and a reason-to-CSV-record exclusion index under `data/processed/phase4/`. Keep this directory writable only by the workspace operator. The bundle is trusted local joblib with datasets and models, and should be recreated from the pinned inputs. Raw archives and artifacts stay out of Git.
 
-For the local Qwen provider, install the optional model dependencies if needed. The tested local cache used Transformers 4.57.6 and PyTorch 2.14.1. If the checkpoint is absent, download through the public Hugging Face model repository once before running offline:
+The repaired assistant uses **Qwen3 4B Instruct 2507, Q4_K_M** in Ollama, tested with Ollama 0.17.7 on an Apple M4 Max with 36 GB RAM. The quantized checkpoint is approximately 2.5 GB. Run the Ollama desktop app or start `ollama serve` if no local server is listening on port 11434. Pull the model once and use the local endpoint:
 
 ```sh
-.venv/bin/python -m pip install -e '.[models]'
-.venv/bin/python -c 'from huggingface_hub import snapshot_download; snapshot_download("Qwen/Qwen2.5-Coder-1.5B-Instruct")'
+ollama pull qwen3:4b-instruct-2507-q4_K_M
 cp -n .env.example .env
 ```
 
-Terminal 1:
+For an older checkout, update only the private `.env` endpoint and model entries, keeping any other settings.
 
 ```sh
-HF_HUB_OFFLINE=1 .venv/bin/python -m scripts.qwen_server
+SENTINEL_QWEN_URL=http://127.0.0.1:11434/v1/chat/completions
+SENTINEL_QWEN_MODEL=qwen3:4b-instruct-2507-q4_K_M
+SENTINEL_QWEN_TOOLS=1
 ```
 
-Terminal 2:
+Start Sentinel in a terminal from the repository root:
 
 ```sh
 set -a
@@ -45,13 +46,13 @@ set +a
 .venv/bin/python -m sentinel.web --init --data-dir data/processed/phase4-demo --port 8767
 ```
 
-Open http://127.0.0.1:8767. `--init` creates a missing synthetic fixture only. `SENTINEL_QWEN_URL` is the full OpenAI-compatible completion endpoint. A different authorized Qwen host can be configured with `SENTINEL_QWEN_MODEL` and an optional `SENTINEL_QWEN_TOKEN`. Keep the token in the server environment and do not open `.env` on camera. `git check-ignore .env` verifies the ignore rule. If the model endpoint is unavailable, analysis, history and the map remain usable, and chat returns a retryable error.
+Open http://127.0.0.1:8767. `--init` creates a missing synthetic fixture only. A different authorized OpenAI-compatible Qwen service can be configured with the full completion endpoint, model identifier and optional server-only token. Set `SENTINEL_QWEN_TOOLS=0` if the provider lacks native tool calls. Direct requests for captured records still use the bounded application service. Keep the token in the server environment and keep `.env` closed during the demo. `git check-ignore .env` verifies the ignore rule. The older `scripts.qwen_server` loads the archived Coder experiment and is useful for reproducing the previous behavior. Its original two-message, 72-token contract does not serve the repaired assistant.
 
 ## Feature contracts and source scopes
 
 | Feature | HTTP endpoint | Model or calculation |
 | --- | --- | --- |
-| Sentinel assistant | `POST /api/chat` | Qwen2.5-Coder-1.5B-Instruct. The model selects an interpretation intent and verified fact keys. The server builds the explanation, inserts figures and checks snapshot citations. |
+| Sentinel assistant | `POST /api/chat` | Qwen3 4B Instruct 2507 in Ollama. It writes conversational replies and can request a bounded captured evidence page. Sentinel owns numerical cards, scope and citations. |
 | Published retail forecast | `GET /api/published/forecast` | Three scikit-learn histogram gradient boosting regressors, quantile loss 0.1, 0.5 and 0.9, trained across store/product series. Runs recursive held-out-origin inference from the artifact. |
 | Published coverage and what-if | `GET /api/published/coverage` | Opening stock divided by prior 28-day mean sales. What-if increases the divisor with stock fixed and replenishment held at zero. |
 | Published shipment lateness | `GET /api/published/lateness` | Delivered date after scheduled date among valid SCMS line items. Vendor filters summarize observed frequency. |
@@ -59,7 +60,18 @@ Open http://127.0.0.1:8767. `--init` creates a missing synthetic fixture only. `
 | Existing Analyze workspace | `POST /api/analyses` | Synthetic fixture only. Quantile histogram gradient boosting for the 14-day fixture forecasts prepared at startup. Dates, coverage, what-if and review priorities use deterministic calculations and rules. |
 | Connected map and replay | `GET /api/map/…` and existing history/evidence endpoints | Record relationships in the synthetic fixture, read-only source inspector, and saved evidence replay. |
 
-Chat receives a question, up to two prior questions, and server-resolved facts for one scope. Supported scopes are a verified analysis, a published result selection, or the last verified map record opened in the inspector. The client sends scope identifiers. Imported free text, reviewer notes and raw rows stay outside the prompt. Chat has no action tools, generated URLs, or SQL execution. Invalid model choices and unreachable providers fail explicitly. Cancellation aborts the client request and upstream wait. Generation in the local provider can continue until its short generation limit when a connection closes. Qualitative explanations are constrained to the intents in `chat.py`. No embedding model runs in this path. The legacy CLI can still run its separate synthetic classifier and diagnostic planner.
+## Assistant behavior
+
+Start with “What can you help me do here?” or “What does days of coverage mean?” No result is needed. The workspace guide covers task inputs, controls, map import and validation, notes, reviews, and replay. Ask a follow-up in the same scope, or use **New conversation**. The composer retains your input on service failure or cancellation. Each answer shows the scope it discussed. The previous four completed question/answer pairs from that same view and record are the maximum conversational history. A context change or cancellation abandons the old result. The UI shows a pending state while Qwen generates.
+
+General questions use plain prose and need no references. For result-specific questions, Qwen sees qualitative descriptions and optional reference handles. The app renders exact figures and record details separately from the generated explanation. Handles resolve through the server-owned response registry. Each saved reference carries the analysis, target, evidence and source version, and opens the matching captured snapshot. Published dataset references point to pinned source documentation. The selected map node or edge binds the answer to the source record. Imported notes, labels, filenames and raw rows are excluded from the model prompt.
+
+Sentinel preloads context from existing applications services. An explicit request for captured records can retrieve one read-only page, and Qwen can also request the same operation through Ollama's structured tool interface. The tool accepts a bounded offset and allowed record category. It uses the current target and immutable evidence version, returns at most four examples, and gets counts from the source service rather than the sample. There are no write or arbitrary execution tools. Exact aggregate calculations remain in the established workflows.
+
+Unknown references or malformed tool arguments receive one repair attempt. If the repair still fails, the app discards the unsupported passage, retains standalone general guidance where safe, and shows verified details and a clear limitation. Qwen interpretations can still be incomplete, so confirm the figures and source details in the evidence viewer before acting. The app does not claim that completed lateness records describe outstanding orders. The source lacks open or cancelled statuses and receipt quantities.
+
+The old errors were reproducible with the actual cached Qwen2.5-Coder model. “What columns does my spreadsheet need?” produced well-formed JSON with a disallowed fact key, `columns`. “Explain what this result means and what data supports it.” without a result produced schema-valid keys `result` and `scope` from an empty evidence registry. Both outputs finished within the observed old generation budget. The original client also sent prior questions only, leaving follow-ups without the assistant’s earlier explanation. The updated path uses full bounded turns and 420 output tokens, with separate handling for actual truncation.
+
 
 The published sources are independent of each other and of the synthetic workspace, map and saved review state. The Published data view shows historical source lineage and is read-only.
 
@@ -85,6 +97,8 @@ CI=1 npm --prefix frontend run test:e2e
 node frontend/scripts/phase4-live.mjs
 ```
 
-The integration run passed **760 Python tests**, **33 Chromium tests**, the full release runner and the staged quality gate. The separate live run rendered all four published result paths, recovered from a genuine Qwen upstream 503 without retyping, and passed native 200% Chromium zoom for the map and chat with a scoped axe scan. The model can choose an unhelpful intent on ambiguous prompts. The source inspector and forecast tables keep the verified facts directly available.
+The conversational repair was verified with the full release runner, 767 Python tests, 33 Chromium regression tests and the staged quality gate. All 23 live content checks passed. The [recorded local Qwen transcript](phase4-chat-live.json) contains the required conversational cases, reproductions of the previously failing prompts under the repair, and additional workflow questions. The transcript contains synthetic fixture and published demo facts only. To reproduce it, run Sentinel with the same Qwen configuration in a disposable workspace on port 8773, then run `.venv/bin/python -m scripts.evaluate_chat` from the repository root. The script writes its report to the ignored `artifacts/phase4-chat/live.json`.
 
-The standard browser suite uses disposable storage and injected responses for chat failures. The live script needs Qwen already listening on port 8769 and Chromium installed. It uses disposable ports 8770 and 8771, exercises rendered published analytics, and verifies recovery from a genuine upstream connection failure by restoring connectivity to real Qwen. It also checks native Chromium 200% zoom. The separate [recording script and live run sheet](phase4-demo.md) cover the supplied presentation and submission requirements.
+The real-browser smoke checks an actual provider connection failure and retry, navigation during a pending request, cancellation followed by a new message, opening the original Supplier B target from a real answer reference, and native Chromium 200% zoom with a scoped axe scan. It injects an invalid reference and truncated tool arguments once each at the provider boundary, then requires real Qwen to produce the repair. Generated error cases are controlled tests and the repaired answers come from Ollama.
+
+The standard browser suite uses disposable storage and injected responses for chat failures. The browser smoke script needs Ollama Qwen already listening on port 11434 and Chromium installed. It uses disposable ports 8770 and 8771, exercises rendered published analytics, and verifies recovery from a genuine upstream connection failure by restoring connectivity to real Qwen. It also checks cancellation, context switching, malformed tool arguments, invalid references, and native Chromium 200% zoom. The separate [recording script and live run sheet](phase4-demo.md) cover the supplied presentation and submission requirements.

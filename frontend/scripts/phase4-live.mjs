@@ -1,5 +1,5 @@
 /* global process, fetch, Buffer, console, chrome, document, window */
-// Run with the cached Qwen provider already listening on port 8769.
+// Run with the local Ollama Qwen provider already listening.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -13,6 +13,11 @@ import { chromium } from "playwright";
 import { expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+const provider =
+  process.env.SENTINEL_LIVE_QWEN_URL ??
+  "http://127.0.0.1:11434/v1/chat/completions";
+const model =
+  process.env.SENTINEL_LIVE_QWEN_MODEL ?? "qwen3:4b-instruct-2507-q4_K_M";
 const temporary = await mkdtemp(join(tmpdir(), "sentinel-live-"));
 const proxyPort = 8771;
 const backendPort = 8770;
@@ -34,13 +39,16 @@ const backend = spawn(
       ...process.env,
       SENTINEL_QWEN_URL: `http://127.0.0.1:${proxyPort}/v1/chat/completions`,
       SENTINEL_QWEN_TOKEN: "",
-      SENTINEL_QWEN_MODEL: "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+      SENTINEL_QWEN_MODEL: model,
     },
   },
 );
 
 let context;
 let proxy;
+let fault;
+let forwardCount = 0;
+let holdNextReply = false;
 try {
   const extension = join(temporary, "zoom");
   await mkdir(extension);
@@ -125,23 +133,29 @@ try {
   assert.equal((await failed).status(), 503);
   await expect(message).toHaveValue(question);
 
-  // Restore connectivity. This relay forwards the request to real Qwen, with no stubbed output.
+  // Restore connectivity. Fault cases replace exactly one completed provider envelope; repairs use real Qwen.
   proxy = createServer(async (request, response) => {
     try {
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
-      const upstream = await fetch(
-        "http://127.0.0.1:8769/v1/chat/completions",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: Buffer.concat(chunks),
-        },
-      );
+      forwardCount++;
+      const hold = holdNextReply;
+      holdNextReply = false;
+      const upstream = await fetch(provider, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: Buffer.concat(chunks),
+      });
+      let text = await upstream.text();
+      if (hold) await setTimeout(1000);
+      if (fault && upstream.ok) {
+        text = JSON.stringify({ choices: [fault] });
+        fault = undefined;
+      }
       response.writeHead(upstream.status, {
         "Content-Type": "application/json",
       });
-      response.end(await upstream.text());
+      response.end(text);
     } catch {
       response.writeHead(503).end();
     }
@@ -149,14 +163,138 @@ try {
   proxy.listen(proxyPort, "127.0.0.1");
   await once(proxy, "listening");
   await page.getByRole("button", { name: "Retry message" }).click();
-  await expect(
-    page.getByText("Qwen/Qwen2.5-Coder-1.5B-Instruct", { exact: true }),
-  ).toBeVisible({ timeout: 48000 });
-  await expect(page.getByText(/estimate is 108.4 units sold/)).toBeVisible();
+  await expect(page.getByText(model, { exact: true })).toBeVisible({
+    timeout: 48000,
+  });
+  await expect(page.getByText(/estimate 108.36 units sold/)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Ask Qwen" })).toBeFocused();
   console.log(
     "Browser live pipeline passed for forecast, coverage, lateness, held-out risk, and real Qwen after HTTP 503.",
+  );
+
+  // Start a real request, close the modal, and navigate before it can render.
+  await page.getByRole("button", { name: "Ask Qwen" }).click();
+  holdNextReply = true;
+  const started = page.waitForRequest((request) =>
+    request.url().endsWith("/api/chat"),
+  );
+  await message.fill(
+    "Compare the forecast against the seasonal-naive results and explain the limitations.",
+  );
+  await page.getByRole("button", { name: "Send message" }).click();
+  await started;
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Supply Chain Map" }).click();
+  await page.getByRole("button", { name: "Ask Qwen" }).click();
+  await expect(
+    page.getByText("Context · Map · no record selected"),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator(".chat-turns")
+      .getByText(
+        "Compare the forecast against the seasonal-naive results and explain the limitations.",
+        { exact: true },
+      ),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "New conversation" }).click();
+
+  // Cancel an active request and send a new general question with the same dialog.
+  await message.fill("What is cycle stock?");
+  const pending = page.waitForRequest((request) =>
+    request.url().endsWith("/api/chat"),
+  );
+  await page.getByRole("button", { name: "Send message" }).click();
+  await pending;
+  await page.getByRole("button", { name: "Cancel request" }).click();
+  await expect(message).toHaveValue("What is cycle stock?");
+  await message.fill("What does days of coverage mean?");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.locator(".chat-answer").last()).toContainText(/days/i, {
+    timeout: 50000,
+  });
+  await expect(
+    page.getByText("What is cycle stock?", { exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Sentinel-Client": "workspace",
+  };
+  const saved = await fetch(base + "/api/analyses", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "supplier_delay",
+      supplier_id: "S2",
+      start_date: "2026-08-01",
+      end_date: "2026-08-31",
+    }),
+  }).then((response) => response.json());
+  for (const injected of [
+    {
+      message: { content: "This unsupported order is overdue. [[F900]]" },
+      finish_reason: "stop",
+    },
+    {
+      message: {
+        tool_calls: [
+          { function: { name: "captured_records", arguments: '{"offset":' } },
+        ],
+      },
+      finish_reason: "tool_calls",
+    },
+  ]) {
+    fault = injected;
+    const before = forwardCount;
+    const response = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        message: "What supports this supplier result?",
+        analysis_id: saved.analysis_id,
+      }),
+    });
+    assert.equal(response.status, 200);
+    const answer = await response.json();
+    assert.equal(answer.model, model);
+    assert.equal(forwardCount - before, 2);
+    assert.match(answer.verified.join(" "), /Supplier B|observed deliveries/);
+    assert(!answer.answer.includes("unsupported order"));
+    assert(
+      answer.citations.every(({ scope }) => scope.target_id === "supplier:S2"),
+    );
+  }
+  console.log(
+    "Real-provider browser context switch and cancellation passed. Invalid reference and truncated tool arguments each repaired with one live generation after controlled injection.",
+  );
+
+  await page.getByRole("button", { name: "Analyze", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Supplier", exact: true })
+    .selectOption("S2");
+  await page.getByRole("button", { name: "Run analysis", exact: true }).click();
+  await expect(page.locator(".result-lead")).toContainText("7 late / 31");
+  await page.getByRole("button", { name: "Ask Qwen" }).click();
+  await message.fill("Show me the records behind that number.");
+  await page.getByRole("button", { name: "Send message" }).click();
+  const captured = page.getByRole("button", {
+    name: "Open captured source records",
+    exact: true,
+  });
+  await expect(captured).toBeVisible({ timeout: 50000 });
+  await captured.click();
+  const evidence = page.getByRole("dialog", {
+    name: "Inspect source evidence",
+  });
+  await expect(evidence.getByLabel("Evidence target")).toHaveValue(
+    "supplier:S2",
+  );
+  await page.keyboard.press("Escape");
+  console.log(
+    "The real Qwen reference opened the original Supplier B target in captured evidence.",
   );
 
   const worker =
